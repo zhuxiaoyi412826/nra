@@ -1,0 +1,167 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no" />
+    <title>射击小游戏</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div id="app">
+      <canvas id="game" width="1280" height="720" aria-label="game-canvas"></canvas>
+
+      <div id="hud" class="hud" hidden>
+        <div id="bossbar" class="bossbar" hidden>
+          <div class="bossbar-title">
+            <span id="boss-name">BOSS</span>
+            <span id="boss-phase" class="boss-phase">阶段 1</span>
+          </div>
+          <div class="bossbar-track"><div id="boss-fill" class="bossbar-fill"></div></div>
+        </div>
+        <div id="toasts" class="toasts" aria-label="toasts"></div>
+        <div class="hud-left">
+          <div class="bars">
+            <div class="bar">
+              <div class="bar-label">生命</div>
+              <div class="bar-track"><div id="bar-health" class="bar-fill health"></div></div>
+              <div id="txt-health" class="bar-text">100/100</div>
+            </div>
+            <div class="bar">
+              <div class="bar-label">饥饿</div>
+              <div class="bar-track"><div id="bar-hunger" class="bar-fill hunger"></div></div>
+              <div id="txt-hunger" class="bar-text">100/100</div>
+            </div>
+            <div class="bar">
+              <div class="bar-label">口渴</div>
+              <div class="bar-track"><div id="bar-thirst" class="bar-fill thirst"></div></div>
+              <div id="txt-thirst" class="bar-text">100/100</div>
+            </div>
+          </div>
+          <div class="stats">
+            <div class="stat"><span class="k">武器</span><span id="txt-weapon" class="v">手枪</span></div>
+            <div class="stat"><span class="k">弹药</span><span id="txt-ammo" class="v">12/48</span></div>
+            <div class="stat"><span class="k">击杀</span><span id="txt-kills" class="v">0</span></div>
+            <div class="stat"><span class="k">金币</span><span id="txt-coins" class="v">0</span></div>
+            <div class="stat"><span class="k">钻石</span><span id="txt-gems" class="v">0</span></div>
+          </div>
+          <div class="stats specials">
+            <div class="stat"><span class="k">Q 手雷</span><span id="txt-sp-q" class="v">就绪</span></div>
+            <div class="stat"><span class="k">E 火箭筒</span><span id="txt-sp-e" class="v">就绪</span></div>
+            <div class="stat"><span class="k">R 雷暴</span><span id="txt-sp-r" class="v">就绪</span></div>
+          </div>
+          <div id="buffs" class="buffs" aria-label="buffs"></div>
+        </div>
+
+        <div class="hud-right">
+          <div class="mission">
+            <div class="mission-title">任务</div>
+            <div id="txt-mission" class="mission-body">击杀 30 个僵尸</div>
+            <div id="txt-mission-progress" class="mission-progress">0/30</div>
+          </div>
+          <div class="timebox">
+            <div class="time-title">时间</div>
+            <div id="txt-time" class="time-body">00:00</div>
+            <div id="txt-phase" class="time-phase">白天</div>
+          </div>
+          <div class="minimap">
+            <div class="minimap-title">小地图</div>
+            <canvas id="minimap" width="220" height="160" aria-label="minimap"></canvas>
+            <div class="minimap-actions">
+              <button id="btn-open-shop" class="btn mini">打开商店（B）</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div id="menu" class="overlay">
+        <div class="panel">
+          <h1 class="title">射击小游戏</h1>
+          <div class="subtitle">WASD/方向键移动，鼠标瞄准，左键射击，R 换弹，Q/1/2 切枪，Esc 暂停</div>
+          <div class="actions">
+            <button id="btn-start" class="btn primary">开始游戏</button>
+            <button id="btn-how" class="btn">操作说明</button>
+            <button id="btn-reset" class="btn danger">清空本地榜</button>
+          </div>
+          <div id="howto" class="howto" hidden>
+            <div class="howto-grid">
+              <div class="howto-item">PC：鼠标瞄准，左键射击</div>
+              <div class="howto-item">PC：F 换弹，1/2/3/4/5/9 切换武器，Q/E/R 释放特殊武器</div>
+              <div class="howto-item">手机：左下摇杆移动，右侧触控瞄准/射击</div>
+              <div class="howto-item">拾取：靠近掉落物自动拾取</div>
+            </div>
+          </div>
+          <div class="leaderboard">
+            <div class="lb-title">本地排行榜（前 10）</div>
+            <ol id="lb-list" class="lb-list"></ol>
+          </div>
+        </div>
+      </div>
+
+      <div id="pause" class="overlay" hidden>
+        <div class="panel">
+          <h2 class="title">已暂停</h2>
+          <div class="actions">
+            <button id="btn-resume" class="btn primary">继续</button>
+            <button id="btn-restart" class="btn">重新开始</button>
+            <button id="btn-back" class="btn">返回主菜单</button>
+          </div>
+        </div>
+      </div>
+
+      <div id="shop" class="overlay" hidden>
+        <div class="panel">
+          <h2 class="title">商店</h2>
+          <div class="subtitle">使用金币/钻石购买补给与升级（B 或 Esc 关闭）</div>
+          <div class="actions">
+            <button id="btn-shop-close" class="btn primary">继续游戏</button>
+            <button id="btn-shop-restart" class="btn">重新开始</button>
+            <button id="btn-shop-back" class="btn">返回主菜单</button>
+          </div>
+          <div class="shop-top">
+            <div class="shop-balance">
+              <span class="k">金币</span><span id="shop-coins" class="v">0</span>
+              <span class="sep"></span>
+              <span class="k">钻石</span><span id="shop-gems" class="v">0</span>
+            </div>
+          </div>
+          <div id="shop-list" class="shop-list" aria-label="shop-list"></div>
+        </div>
+      </div>
+
+      <div id="dead" class="overlay" hidden>
+        <div class="panel">
+          <h2 class="title">你阵亡了</h2>
+          <div id="dead-summary" class="summary"></div>
+          <div class="actions">
+            <button id="btn-again" class="btn primary">再来一局</button>
+            <button id="btn-dead-back" class="btn">返回主菜单</button>
+          </div>
+        </div>
+      </div>
+
+      <div id="touch" class="touch" hidden>
+        <div id="stick" class="stick">
+          <div id="stick-base" class="stick-base"></div>
+          <div id="stick-knob" class="stick-knob"></div>
+        </div>
+        <div class="touch-right">
+          <button id="btn-shoot" class="btn touch-btn primary">射击</button>
+          <button id="btn-reload" class="btn touch-btn">换弹</button>
+          <button id="btn-swap" class="btn touch-btn">切枪</button>
+          <button id="btn-shop" class="btn touch-btn">商店</button>
+          <button id="btn-pause" class="btn touch-btn">暂停</button>
+        </div>
+      </div>
+    </div>
+
+    <script src="./js/core.js"></script>
+    <script src="./js/weapons.js"></script>
+    <script src="./js/world.js"></script>
+    <script src="./js/entities.js"></script>
+    <script src="./js/boss.js"></script>
+    <script src="./js/render.js"></script>
+    <script src="./js/ui.js"></script>
+    <script src="./js/gameplay.js"></script>
+    <script src="./game.js"></script>
+  </body>
+</html>

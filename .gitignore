@@ -1,0 +1,17 @@
+# OS / Editor
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Logs
+*.log
+
+# Dependencies / build outputs (if added later)
+node_modules/
+dist/
+build/
+
+# IDE
+.vscode/
+.idea/
+
