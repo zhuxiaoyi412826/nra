@@ -6,6 +6,10 @@
   const { drawWorld, drawBullet, drawPickup, drawSpecial, drawLightning, drawEnemy, drawBoss, drawParticle, drawPlayer, nightOverlay } =
     root.render;
   const WORLD = root.WORLD;
+  const GAME_SCALE = Math.max(0.5, Math.min(3, Number(root.constants?.GAME_SCALE ?? 1) || 1));
+  const circleRectResolve = root.collision?.circleRectResolve;
+  const BODY_PUSH_RATIO = 0.6;
+  const ENEMY_BODY_PUSH_RATIO = 0.55;
 
   class Game {
     constructor(audio, ui) {
@@ -36,6 +40,7 @@
       this.eliteAnnounceCd = 0;
       this.nextBossAt = 35;
       this.bossLevel = 1;
+      this.dropCount = { normal: 0, elite: 0 };
       this.special = {
         grenade: { cd: 0, cooldown: 4.0 },
         rocket: { cd: 0, cooldown: 7.0 },
@@ -73,6 +78,7 @@
       this.boss.active = false;
       this.nextBossAt = 35;
       this.bossLevel = 1;
+      this.dropCount = { normal: 0, elite: 0 };
       this.special.grenade.cd = 0;
       this.special.rocket.cd = 0;
       this.special.thunder.cd = 0;
@@ -106,10 +112,11 @@
       if (!sp || sp.cd > 0) return false;
       const ax = this.player.aimX || 1;
       const ay = this.player.aimY || 0;
+      const spawnOff = (this.player?.r ?? 16) + 10 * GAME_SCALE;
       if (kind === "grenade") {
         const speed = 520;
         const g = this.specials.acquire();
-        g.init("grenade", this.player.x + ax * 26, this.player.y + ay * 26, ax * speed, ay * speed, 1.2);
+        g.init("grenade", this.player.x + ax * spawnOff, this.player.y + ay * spawnOff, ax * speed, ay * speed, 1.2);
         sp.cd = sp.cooldown;
         this.audio.grenade();
         if (shake) shake.kick(1.2);
@@ -118,7 +125,7 @@
       if (kind === "rocket") {
         const speed = 860;
         const r = this.specials.acquire();
-        r.init("rocket", this.player.x + ax * 28, this.player.y + ay * 28, ax * speed, ay * speed, 1.6);
+        r.init("rocket", this.player.x + ax * (spawnOff + 2 * GAME_SCALE), this.player.y + ay * (spawnOff + 2 * GAME_SCALE), ax * speed, ay * speed, 1.6);
         sp.cd = sp.cooldown;
         this.audio.rocket();
         if (shake) shake.kick(1.8);
@@ -154,6 +161,8 @@
       this.killEnemy(this.boss.x, this.boss.y, true);
       this.coins += 180 + Math.floor(this.difficulty) * 40;
       this.gems += 4;
+      const epicKey = this.rollEpicWeaponDropKey();
+      this.pickups.acquire().init("weapon", this.boss.x + rand(-12, 12), this.boss.y + rand(-12, 12), epicKey);
       this.tryDrop(this.boss.x, this.boss.y, true);
       this.tryDrop(this.boss.x + 18, this.boss.y - 10, true);
       this.tryDrop(this.boss.x - 18, this.boss.y + 10, true);
@@ -208,6 +217,7 @@
             this.audio.enemyDie(e.elite);
             this.killEnemy(e.x, e.y, e.elite);
             this.tryDrop(e.x, e.y, e.elite);
+            this.progressKillDrops(e.x, e.y, e.elite);
           } else {
             this.hitEnemy(e.x, e.y);
           }
@@ -314,6 +324,80 @@
     hurtPlayer(x, y) {
       this.spawnBurst(x, y, { count: 14, speed: 220, spread: 2.4, ttlA: 0.12, ttlB: 0.28, sizeA: 1, sizeB: 3, color: "#ff7b7b", alpha: 0.75, drag: 3.6, gravity: 180 });
     }
+    rollWeaponDropKey() {
+      const pool = ["smg", "dmr", "sniper", "hmg"];
+      const owned = new Set(this.player.inv.map((s) => s.weapon?.key).filter(Boolean));
+      const avail = pool.filter((k) => !owned.has(k));
+      const list = avail.length ? avail : pool;
+      return list[Math.floor(Math.random() * list.length)];
+    }
+    rollEpicWeaponDropKey() {
+      const pool = ["epic_smg", "epic_dmr", "epic_sniper", "epic_hmg"];
+      return pool[Math.floor(Math.random() * pool.length)];
+    }
+    rollBuffDropId() {
+      const pool = ["hp_up", "spd_up", "dmg_up"];
+      return pool[Math.floor(Math.random() * pool.length)];
+    }
+    progressKillDrops(x, y, elite) {
+      if (elite) this.dropCount.elite += 1;
+      else this.dropCount.normal += 1;
+      const need = elite ? 5 : 10;
+      const cur = elite ? this.dropCount.elite : this.dropCount.normal;
+      if (cur < need) return false;
+      if (elite) this.dropCount.elite = 0;
+      else this.dropCount.normal = 0;
+      const roll = Math.random();
+      if (roll < 0.5) this.pickups.acquire().init("weapon", x + rand(-12, 12), y + rand(-12, 12), this.rollWeaponDropKey());
+      else this.pickups.acquire().init("buff", x + rand(-12, 12), y + rand(-12, 12), this.rollBuffDropId());
+      return true;
+    }
+    giveWeapon(weaponKey) {
+      const w = root.constants.WEAPONS[weaponKey];
+      if (!w) return { ok: false, reason: "missing" };
+      const inv = this.player.inv;
+      const idx = inv.findIndex((s) => s.weapon && s.weapon.key === weaponKey);
+      const reserveAdd = Math.max(40, Math.floor((w.magSize || 12) * 2.5));
+      if (idx >= 0) {
+        inv[idx].reserve += reserveAdd;
+        return { ok: true, w, already: true, reserveAdd };
+      }
+      if (inv.length >= 5) {
+        if (String(weaponKey).startsWith("epic_")) {
+          const at = clamp(this.player.activeSlot, 0, inv.length - 1);
+          inv[at] = { weapon: w, mag: w.magSize, reserve: Math.max(120, Math.floor((w.magSize || 12) * 5)), reloading: 0, cooldown: 0 };
+          this.player.activeSlot = at;
+          return { ok: true, w, replaced: true };
+        }
+        const s = inv[this.player.activeSlot] || inv[0];
+        if (s) s.reserve += reserveAdd;
+        return { ok: true, w, full: true, reserveAdd };
+      }
+      const reserve = Math.max(80, Math.floor((w.magSize || 12) * 4));
+      inv.push({ weapon: w, mag: w.magSize, reserve, reloading: 0, cooldown: 0 });
+      this.player.activeSlot = inv.length - 1;
+      return { ok: true, w, added: true };
+    }
+    applyBuff(buffId) {
+      const cap = 12;
+      if (buffId === "hp_up") {
+        this.upgrades.hp = Math.min(cap, (this.upgrades.hp ?? 0) + 1);
+        this.player.maxHp += 10;
+        this.player.hp = clamp(this.player.hp + 10, 0, this.player.maxHp);
+        return { ok: true, text: "生命上限提升 +10" };
+      }
+      if (buffId === "spd_up") {
+        this.upgrades.speed = Math.min(cap, (this.upgrades.speed ?? 0) + 1);
+        this.player.speed *= 1.06;
+        return { ok: true, text: "移速提升 +6%" };
+      }
+      if (buffId === "dmg_up") {
+        this.upgrades.damage = Math.min(cap, (this.upgrades.damage ?? 0) + 1);
+        this.player.damageMul *= 1.08;
+        return { ok: true, text: "伤害提升 +8%" };
+      }
+      return { ok: false, text: "未知增益" };
+    }
     tryDrop(x, y, elite) {
       const coins = elite ? randInt(4, 9) : randInt(1, 4);
       this.pickups.acquire().init("coin", x + rand(-10, 10), y + rand(-10, 10), coins);
@@ -325,6 +409,7 @@
       if (elite || Math.random() < 0.028) this.pickups.acquire().init("gem", x + rand(-10, 10), y + rand(-10, 10), elite ? 2 : 1);
     }
     handlePickups(audio) {
+      const toast = this.ui?.toast;
       for (const p of this.pickups.items) {
         if (!p.active) continue;
         const d = Math.hypot(p.x - this.player.x, p.y - this.player.y);
@@ -338,8 +423,93 @@
           } else if (p.type === "med") this.player.hp = clamp(this.player.hp + p.value, 0, this.player.maxHp);
           else if (p.type === "food") this.player.hunger = clamp(this.player.hunger + p.value, 0, this.player.maxHunger);
           else if (p.type === "water") this.player.thirst = clamp(this.player.thirst + p.value, 0, this.player.maxThirst);
+          else if (p.type === "weapon") {
+            const res = this.giveWeapon(p.value);
+            if (toast && res && res.ok && res.w) {
+              if (res.added) toast(`获得武器：${res.w.name}`, "buff");
+              else if (res.already) toast(`${res.w.name} 弹药 +${res.reserveAdd}`, "good");
+              else if (res.replaced) toast(`史诗掉落已装备：${res.w.name}`, "buff");
+              else if (res.full) toast(`武器槽已满 → ${res.w.name} 弹药 +${res.reserveAdd}`, "good");
+            }
+          } else if (p.type === "buff") {
+            const res = this.applyBuff(p.value);
+            if (toast && res && res.text) toast(res.text, "buff");
+          }
           audio.pickup(p.type);
         }
+      }
+    }
+    resolveBodyPushes() {
+      const p = this.player;
+      if (!p) return;
+      const enemies = this.enemies.items;
+      const pushFrom = (x, y, r) => {
+        const dx = p.x - x;
+        const dy = p.y - y;
+        const dist = Math.hypot(dx, dy);
+        const min = (p.r ?? 16) + r;
+        if (dist >= min) return;
+        const nx = dist > 1e-6 ? dx / dist : 1;
+        const ny = dist > 1e-6 ? dy / dist : 0;
+        const push = (min - dist) * BODY_PUSH_RATIO;
+        p.x += nx * push;
+        p.y += ny * push;
+      };
+
+      for (const e of enemies) {
+        if (!e.active) continue;
+        pushFrom(e.x, e.y, e.r ?? 18);
+      }
+      if (this.boss && this.boss.active) pushFrom(this.boss.x, this.boss.y, this.boss.r ?? 46);
+
+      p.x = clamp(p.x, p.r, WORLD.w - p.r);
+      p.y = clamp(p.y, p.r, WORLD.h - p.r);
+      if (circleRectResolve) {
+        for (const ob of WORLD.obstacles) {
+          const res = circleRectResolve(p.x, p.y, p.r, ob);
+          if (res.hit) {
+            p.x = res.x;
+            p.y = res.y;
+          }
+        }
+      }
+
+      const resolveEnemyObstacles = (e) => {
+        e.x = clamp(e.x, e.r, WORLD.w - e.r);
+        e.y = clamp(e.y, e.r, WORLD.h - e.r);
+        if (!circleRectResolve) return;
+        for (const ob of WORLD.obstacles) {
+          const res = circleRectResolve(e.x, e.y, e.r, ob);
+          if (res.hit) {
+            e.x = res.x;
+            e.y = res.y;
+          }
+        }
+      };
+
+      for (let i = 0; i < enemies.length; i += 1) {
+        const a = enemies[i];
+        if (!a.active) continue;
+        for (let j = i + 1; j < enemies.length; j += 1) {
+          const b = enemies[j];
+          if (!b.active) continue;
+          const dx = a.x - b.x;
+          const dy = a.y - b.y;
+          const dist = Math.hypot(dx, dy);
+          const min = (a.r ?? 18) + (b.r ?? 18);
+          if (dist >= min) continue;
+          const nx = dist > 1e-6 ? dx / dist : 1;
+          const ny = dist > 1e-6 ? dy / dist : 0;
+          const push = (min - dist) * ENEMY_BODY_PUSH_RATIO * 0.5;
+          a.x += nx * push;
+          a.y += ny * push;
+          b.x -= nx * push;
+          b.y -= ny * push;
+        }
+      }
+      for (const e of enemies) {
+        if (!e.active) continue;
+        resolveEnemyObstacles(e);
       }
     }
     update(dt, input, shake, audio, tNow) {
@@ -367,7 +537,6 @@
       audio.setAmbient(night ? 0.58 : 0.22);
 
       if (!this.boss.active && this.kills >= this.nextBossAt) {
-        for (const e of this.enemies.items) e.active = false;
         this.boss.init(this.bossLevel + Math.floor(this.difficulty));
         audio.bossSpawn();
         this.spawnBurst(this.boss.x, this.boss.y, { count: 46, speed: 420, spread: 3.14, ttlA: 0.2, ttlB: 0.5, sizeA: 1, sizeB: 4, color: "#ffd36f", alpha: 0.9, drag: 3.2, gravity: 200 });
@@ -461,6 +630,7 @@
                 audio.enemyDie(target.enemy.elite);
                 this.killEnemy(target.enemy.x, target.enemy.y, target.enemy.elite);
                 this.tryDrop(target.enemy.x, target.enemy.y, target.enemy.elite);
+                this.progressKillDrops(target.enemy.x, target.enemy.y, target.enemy.elite);
               }
             }
           }
@@ -501,6 +671,8 @@
         );
       }
 
+      this.resolveBodyPushes();
+
       for (const b of this.bullets.items) {
         if (!b.active || !b.fromPlayer) continue;
         if (this.boss.active) {
@@ -530,6 +702,7 @@
               audio.enemyDie(e.elite);
               this.killEnemy(e.x, e.y, e.elite);
               this.tryDrop(e.x, e.y, e.elite);
+              this.progressKillDrops(e.x, e.y, e.elite);
             }
             break;
           }

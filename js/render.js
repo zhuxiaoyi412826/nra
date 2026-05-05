@@ -2,6 +2,7 @@
   const root = (window.Shooter = window.Shooter || {});
   const { clamp, rand } = root.util;
   const { PICKUP } = root.constants;
+  const GAME_SCALE = Math.max(0.5, Math.min(3, Number(root.constants?.GAME_SCALE ?? 1) || 1));
 
   const mkCanvas = (w, h) => {
     const c = document.createElement("canvas");
@@ -139,7 +140,7 @@
       const cfg = window.Shooter?.config;
       const v = Number(cfg?.pixelScale || 0);
       if (Number.isFinite(v) && v >= 1) return Math.max(1, Math.min(6, Math.floor(v)));
-      return isTouch ? 2 : 3;
+      return isTouch ? 3 : 2;
     }
     resize(isTouch) {
       const rect = this.canvas.getBoundingClientRect();
@@ -220,7 +221,82 @@
     if (!p.active) return;
     const sx = p.x - cam.x;
     const sy = p.y - cam.y;
-    ctx.fillStyle = PICKUP[p.type].color;
+    const boxBase = Math.max(10, Math.round((32 * GAME_SCALE) / 3));
+    if (p.type === "weapon") {
+      const isEpic = typeof p.value === "string" && p.value.startsWith("epic_");
+      const s = isEpic ? Math.round(boxBase * 1.15) : boxBase;
+      const x = Math.round(sx - s / 2);
+      const y = Math.round(sy - s / 2);
+      if (isEpic) {
+        ctx.globalAlpha = 0.85;
+        ctx.fillStyle = "rgba(255,111,176,0.12)";
+        ctx.beginPath();
+        ctx.arc(sx, sy, 16, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.globalAlpha = 1;
+      }
+      ctx.fillStyle = "#6b4a2f";
+      ctx.fillRect(x, y, s, s);
+      ctx.fillStyle = "#8a6240";
+      ctx.fillRect(x + 2, y + 2, s - 4, s - 4);
+      ctx.fillStyle = "rgba(0,0,0,0.2)";
+      ctx.fillRect(x + 2, y + Math.floor(s * 0.55), s - 4, 2);
+      ctx.fillStyle = isEpic ? "#ff6fb0" : "#ffd36f";
+      const strap = Math.max(2, Math.floor(s * 0.18));
+      ctx.fillRect(x, y + Math.floor(s / 2) - Math.floor(strap / 2), s, strap);
+      ctx.fillRect(x + Math.floor(s / 2) - Math.floor(strap / 2), y, strap, s);
+      ctx.strokeStyle = "rgba(0,0,0,0.4)";
+      ctx.lineWidth = 2;
+      ctx.strokeRect(x, y, s, s);
+      if (isEpic) {
+        ctx.fillStyle = "#ffffff";
+        const cx = x + Math.floor(s / 2);
+        const cy = y + 3;
+        ctx.fillRect(cx - 1, cy, 3, 2);
+        ctx.fillRect(cx, cy - 1, 1, 4);
+      }
+      return;
+    }
+
+    if (p.type === "buff") {
+      const s = boxBase;
+      const x = Math.round(sx - s / 2);
+      const y = Math.round(sy - s / 2);
+      const id = String(p.value || "");
+      const scheme =
+        id === "hp_up"
+          ? { base: "#ff7b7b", mid: "#ffd1d1", icon: "#591c1c" }
+          : id === "spd_up"
+          ? { base: "#9bff53", mid: "#d7ffc0", icon: "#214a13" }
+          : { base: "#a48bff", mid: "#d9d0ff", icon: "#24165c" };
+      ctx.fillStyle = scheme.base;
+      ctx.fillRect(x, y, s, s);
+      ctx.fillStyle = scheme.mid;
+      ctx.fillRect(x + 2, y + 2, s - 4, s - 4);
+      ctx.fillStyle = scheme.icon;
+      if (id === "hp_up") {
+        ctx.fillRect(x + 5, y + 3, 1, 5);
+        ctx.fillRect(x + 3, y + 5, 5, 1);
+      } else if (id === "spd_up") {
+        ctx.fillRect(x + 3, y + 6, 5, 1);
+        ctx.fillRect(x + 6, y + 4, 1, 5);
+        ctx.fillRect(x + 5, y + 5, 1, 1);
+        ctx.fillRect(x + 4, y + 6, 1, 1);
+      } else {
+        ctx.fillRect(x + 4, y + 4, 3, 3);
+        ctx.fillRect(x + 5, y + 3, 1, 1);
+        ctx.fillRect(x + 5, y + 7, 1, 1);
+        ctx.fillRect(x + 3, y + 5, 1, 1);
+        ctx.fillRect(x + 7, y + 5, 1, 1);
+      }
+      ctx.strokeStyle = "rgba(0,0,0,0.35)";
+      ctx.lineWidth = 2;
+      ctx.strokeRect(x, y, s, s);
+      return;
+    }
+
+    const def = PICKUP[p.type] || { color: "#ffffff" };
+    ctx.fillStyle = def.color;
     const r = p.type === "gem" ? 4 : 3;
     ctx.fillRect(Math.round(sx - r), Math.round(sy - r), r * 2, r * 2);
     ctx.strokeStyle = "rgba(0,0,0,0.25)";
@@ -300,7 +376,9 @@
     ctx.globalAlpha = e.hitFlash > 0 ? 0.35 : 1;
     ctx.fillStyle = "#ffffff";
     if (e.hitFlash > 0) ctx.globalAlpha = 0.55;
-    ctx.drawImage(spr, Math.round(sx - spr.width / 2), Math.round(sy - spr.height / 2));
+    const w = spr.width * GAME_SCALE;
+    const h = spr.height * GAME_SCALE;
+    ctx.drawImage(spr, Math.round(sx - w / 2), Math.round(sy - h / 2), Math.round(w), Math.round(h));
     ctx.globalAlpha = 1;
     const hpPct = clamp(e.hp / e.maxHp, 0, 1);
     ctx.fillStyle = "rgba(0,0,0,0.35)";
@@ -339,18 +417,38 @@
   const drawPlayer = (ctx, atlas, cam, p) => {
     const sx = p.x - cam.x;
     const sy = p.y - cam.y;
+    if (window.Shooter?.config?.invincible === true) {
+      const tt = (performance.now ? performance.now() : Date.now()) / 1000;
+      const pulse = 0.5 + 0.5 * Math.sin(tt * 6.2);
+      const r = (p.r ?? 16) + (12 + pulse * 6) * GAME_SCALE;
+      const g = ctx.createRadialGradient(sx, sy, Math.max(1, r * 0.25), sx, sy, r);
+      g.addColorStop(0, "rgba(255,211,111,0.0)");
+      g.addColorStop(0.55, `rgba(255,211,111,${0.08 + pulse * 0.06})`);
+      g.addColorStop(1, "rgba(255,211,111,0.0)");
+      ctx.fillStyle = g;
+      ctx.beginPath();
+      ctx.arc(sx, sy, r, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = `rgba(255,211,111,${0.3 + pulse * 0.25})`;
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(sx, sy, r - 3 * GAME_SCALE, 0, Math.PI * 2);
+      ctx.stroke();
+    }
     ctx.save();
     ctx.translate(sx, sy);
     ctx.rotate(Math.atan2(p.aimY, p.aimX));
     ctx.globalAlpha = p.invuln > 0 ? 0.6 : 1;
-    ctx.drawImage(atlas.player, -atlas.player.width / 2, -atlas.player.height / 2);
+    const w = atlas.player.width * GAME_SCALE;
+    const h = atlas.player.height * GAME_SCALE;
+    ctx.drawImage(atlas.player, -w / 2, -h / 2, w, h);
     ctx.globalAlpha = 1;
     ctx.restore();
     ctx.strokeStyle = "rgba(255,255,255,0.18)";
     ctx.lineWidth = 2;
     ctx.beginPath();
     ctx.moveTo(sx, sy);
-    ctx.lineTo(sx + p.aimX * 34, sy + p.aimY * 34);
+    ctx.lineTo(sx + p.aimX * (34 * GAME_SCALE), sy + p.aimY * (34 * GAME_SCALE));
     ctx.stroke();
   };
 

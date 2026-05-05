@@ -20,6 +20,7 @@
         </div>
         <div id="toasts" class="toasts" aria-label="toasts"></div>
         <div class="hud-left">
+          <div id="fps-hud" class="fps-hud" hidden><span id="txt-fps">0</span> FPS</div>
           <div class="bars">
             <div class="bar">
               <div class="bar-label">生命</div>
@@ -43,7 +44,6 @@
             <div class="stat"><span class="k">击杀</span><span id="txt-kills" class="v">0</span></div>
             <div class="stat"><span class="k">金币</span><span id="txt-coins" class="v">0</span></div>
             <div class="stat"><span class="k">钻石</span><span id="txt-gems" class="v">0</span></div>
-            <div id="stat-fps" class="stat" hidden><span class="k">FPS</span><span id="txt-fps" class="v">0</span></div>
           </div>
           <div class="stats specials">
             <div class="stat"><span class="k">Q 手雷</span><span id="txt-sp-q" class="v">就绪</span></div>
@@ -157,10 +157,12 @@
                 <span class="label">像素尺度</span>
                 <select id="set-pixel" class="control">
                   <option value="0">自动</option>
+                  <option value="1">1</option>
                   <option value="2">2</option>
                   <option value="3">3</option>
                   <option value="4">4</option>
                   <option value="5">5</option>
+                  <option value="6">6</option>
                 </select>
               </label>
               <label class="field check">
@@ -198,6 +200,10 @@
               <label class="field check">
                 <input id="set-inf-ammo" type="checkbox" />
                 <span class="label">无限弹药</span>
+              </label>
+              <label class="field check">
+                <input id="set-invincible" type="checkbox" />
+                <span class="label">无敌</span>
               </label>
             </div>
           </div>

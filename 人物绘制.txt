@@ -1,0 +1,25 @@
+物和敌人的绘制是用 Canvas 2D + 离屏“像素贴图”(SpriteAtlas) + 像素化渲染管线(PixelRenderer) 做的，流程是：
+
+1 先“生成贴图”（不是加载图片，而是代码画出来）
+
+- 在 render.js 里有 class SpriteAtlas
+  - makePlayer() ：创建一个 32x32 的离屏 canvas，然后用 pxRect() 一块块画像素方块组成角色
+  - makeEnemy() ：同样用 32x32 离屏 canvas 画敌人（不同 type 颜色/形状不同）
+  - makeBoss() ：用 64x64 离屏 canvas 画 BOSS
+- 这些离屏 canvas 就相当于“程序生成的 sprite 图片”，缓存到 renderer.atlas 里复用。
+2 每帧把贴图画到游戏世界
+
+- 角色绘制： drawPlayer(ctx, atlas, cam, player)
+  - 位置： drawPlayer
+  - 做了：相机偏移（ sx = x - cam.x ）、按瞄准方向旋转、然后 ctx.drawImage(atlas.player, ...) 绘制
+- 敌人绘制： drawEnemy(ctx, atlas, cam, enemy)
+  - 位置： drawEnemy
+  - 做了：选 sprite（普通/精英、不同 type）、受击闪白、血条、精英外圈特效
+3 像素化效果（决定像素风）
+
+- 真正渲染不是直接画到主 canvas：而是先画到高分辨率 hi ，再缩到低分辨率 lo ，最后放大回主 canvas
+- 代码在 PixelRenderer.render
+  - hiCtx ：画完整游戏
+  - loCtx.drawImage(hi, 0,0, loW, loH) ：降采样
+  - ctx.drawImage(lo, 0,0, canvasW, canvasH) ：放大且关闭 smoothing，形成像素块
+所以总结一句： 角色/敌人贴图用代码画出来缓存成离屏 canvas，然后每帧 drawImage 到世界，最后通过 hi→lo→canvas 的缩放管线把画面像素化

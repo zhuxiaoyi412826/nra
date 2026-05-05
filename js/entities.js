@@ -3,6 +3,14 @@
   const { clamp, norm, rand, randInt } = root.util;
   const { circleRectHit, circleRectResolve } = root.collision;
   const { WEAPONS, PICKUP } = root.constants;
+  const GAME_SCALE = Math.max(0.5, Math.min(3, Number(root.constants?.GAME_SCALE ?? 1) || 1));
+  const PLAYER_BASE_R = 16;
+  const ENEMY_BASE_R = { basic: 18, fast: 16, tank: 22, ranged: 17 };
+  const ENEMY_ELITE_BONUS_R = 3;
+  const SHOT_SPAWN_PAD = 6 * GAME_SCALE;
+  const MUZZLE_PAD = 7 * GAME_SCALE;
+  const PICKUP_BOX_SIZE = Math.max(10, Math.round(((PLAYER_BASE_R * 2) * GAME_SCALE) / 3));
+  const PICKUP_BOX_R = Math.max(8, Math.round(PICKUP_BOX_SIZE * 0.55));
 
   class Bullet {
     constructor() {
@@ -58,7 +66,7 @@
       this.elite = false;
       this.x = 0;
       this.y = 0;
-      this.r = 18;
+      this.r = ENEMY_BASE_R.basic * GAME_SCALE;
       this.hp = 30;
       this.maxHp = 30;
       this.speed = 120;
@@ -75,32 +83,32 @@
       this.y = y;
       const base = difficulty;
       if (t === "basic") {
-        this.r = 18;
+        this.r = ENEMY_BASE_R.basic * GAME_SCALE;
         this.maxHp = 32 + base * 8;
         this.speed = 118 + base * 12;
         this.touchDmg = 9 + base * 2;
         this.shootCd = 0;
       } else if (t === "fast") {
-        this.r = 16;
+        this.r = ENEMY_BASE_R.fast * GAME_SCALE;
         this.maxHp = 26 + base * 7;
         this.speed = 168 + base * 16;
         this.touchDmg = 8 + base * 2;
         this.shootCd = 0;
       } else if (t === "tank") {
-        this.r = 22;
+        this.r = ENEMY_BASE_R.tank * GAME_SCALE;
         this.maxHp = 70 + base * 20;
         this.speed = 88 + base * 10;
         this.touchDmg = 14 + base * 3;
         this.shootCd = 0;
       } else {
-        this.r = 17;
+        this.r = ENEMY_BASE_R.ranged * GAME_SCALE;
         this.maxHp = 30 + base * 10;
         this.speed = 110 + base * 10;
         this.touchDmg = 7 + base * 2;
         this.shootCd = rand(0.6, 1.2);
       }
       if (this.elite) {
-        this.r += 3;
+        this.r += ENEMY_ELITE_BONUS_R * GAME_SCALE;
         this.maxHp = Math.floor(this.maxHp * 1.85 + 10);
         this.speed *= 1.14;
         this.touchDmg = Math.floor(this.touchDmg * 1.25);
@@ -128,7 +136,8 @@
       const n = dist > 1e-6 ? { x: toP.x / dist, y: toP.y / dist } : { x: 0, y: 0 };
       const nightBoost = isNight ? 1.15 : 1.0;
       const eliteBoost = this.elite ? 1.08 : 1.0;
-      const desiredSpeed = this.type === "ranged" && dist < 280 ? this.speed * 0.35 : this.speed;
+      const pushingSlow = dist < this.r + (player.r ?? 16) ? 0.5 : 1.0;
+      const desiredSpeed = (this.type === "ranged" && dist < 280 ? this.speed * 0.35 : this.speed) * pushingSlow;
       this.x += n.x * desiredSpeed * nightBoost * eliteBoost * dt;
       this.y += n.y * desiredSpeed * nightBoost * eliteBoost * dt;
       this.x = clamp(this.x, this.r, world.w - this.r);
@@ -153,8 +162,8 @@
           const sp = 580 + difficulty * 70 + (this.elite ? 120 : 0);
           const b = bullets.acquire();
           b.init({
-            x: this.x + aim.x * (this.r + 6),
-            y: this.y + aim.y * (this.r + 6),
+            x: this.x + aim.x * (this.r + SHOT_SPAWN_PAD),
+            y: this.y + aim.y * (this.r + SHOT_SPAWN_PAD),
             vx: aim.x * sp,
             vy: aim.y * sp,
             dmg: (8 + difficulty * 2) * (this.elite ? 1.25 : 1),
@@ -182,7 +191,7 @@
       this.x = x;
       this.y = y;
       this.value = value;
-      this.r = type === "gem" ? 11 : 10;
+      this.r = type === "gem" ? 11 : type === "weapon" ? PICKUP_BOX_R : type === "buff" ? PICKUP_BOX_R : 10;
       this.ttl = 18;
     }
     update(dt) {
@@ -240,7 +249,7 @@
     constructor() {
       this.x = 0;
       this.y = 0;
-      this.r = 16;
+      this.r = PLAYER_BASE_R * GAME_SCALE;
       this.speed = 230;
       this.hp = 100;
       this.maxHp = 100;
@@ -289,12 +298,12 @@
       s.cooldown = Math.max(0, s.cooldown - dt);
       s.reloading = Math.max(0, s.reloading - dt);
       this.invuln = Math.max(0, this.invuln - dt);
-      const hungerDrain = 2.3;
-      const thirstDrain = 3.0;
+      const hungerDrain = 0.23;
+      const thirstDrain = 0.3;
       this.hunger = clamp(this.hunger - hungerDrain * dt, 0, this.maxHunger);
       this.thirst = clamp(this.thirst - thirstDrain * dt, 0, this.maxThirst);
       const starving = this.hunger <= 8 || this.thirst <= 8;
-      if (starving) {
+      if (starving && root.config?.invincible !== true) {
         this.hp = clamp(this.hp - 4.5 * dt, 0, this.maxHp);
       }
       if (s.reloading === 0 && s.mag < s.weapon.magSize && s.reserve > 0 && input.reloadPressed) {
@@ -350,8 +359,8 @@
         const vy = Math.sin(ang) * s.weapon.bulletSpeed;
         const b = bullets.acquire();
         b.init({
-          x: this.x + Math.cos(ang) * (this.r + 6),
-          y: this.y + Math.sin(ang) * (this.r + 6),
+          x: this.x + Math.cos(ang) * (this.r + SHOT_SPAWN_PAD),
+          y: this.y + Math.sin(ang) * (this.r + SHOT_SPAWN_PAD),
           vx,
           vy,
           dmg: s.weapon.damage * this.damageMul,
@@ -361,11 +370,12 @@
           color: s.weapon.bulletColor,
         });
       }
-      emit.muzzle(this.x + this.aimX * (this.r + 7), this.y + this.aimY * (this.r + 7), this.aimX, this.aimY, s.weapon.key);
+      emit.muzzle(this.x + this.aimX * (this.r + MUZZLE_PAD), this.y + this.aimY * (this.r + MUZZLE_PAD), this.aimX, this.aimY, s.weapon.key);
       audio.shot(s.weapon.key);
       shake.kick(s.weapon.kick);
     }
     takeDamage(dmg, push, audio) {
+      if (root.config?.invincible === true) return;
       if (this.invuln > 0) return;
       this.hp = clamp(this.hp - dmg, 0, this.maxHp);
       this.invuln = 0.25;

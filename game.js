@@ -47,8 +47,9 @@
   const setInfCoins = document.getElementById("set-inf-coins");
   const setInfGems = document.getElementById("set-inf-gems");
   const setInfAmmo = document.getElementById("set-inf-ammo");
+  const setInvincible = document.getElementById("set-invincible");
 
-  const elStatFps = document.getElementById("stat-fps");
+  const elFpsHud = document.getElementById("fps-hud");
   const elTxtFps = document.getElementById("txt-fps");
   const elHowTo = ui.elHowTo;
 
@@ -107,7 +108,7 @@
   const input = new Input();
   let lastUiState = game.state;
   let settingsReturnState = null;
-  let fpsSmoothed = 60;
+  let fpsInstant = 60;
 
   const syncSettingsForm = () => {
     const cfg = root.config || {};
@@ -119,6 +120,7 @@
     if (setInfCoins) setInfCoins.checked = cfg.infiniteCoins !== false;
     if (setInfGems) setInfGems.checked = cfg.infiniteGems !== false;
     if (setInfAmmo) setInfAmmo.checked = cfg.infiniteAmmo !== false;
+    if (setInvincible) setInvincible.checked = cfg.invincible === true;
   };
 
   const applySettings = () => {
@@ -131,10 +133,11 @@
     if (setInfCoins) cfg.infiniteCoins = Boolean(setInfCoins.checked);
     if (setInfGems) cfg.infiniteGems = Boolean(setInfGems.checked);
     if (setInfAmmo) cfg.infiniteAmmo = Boolean(setInfAmmo.checked);
+    if (setInvincible) cfg.invincible = Boolean(setInvincible.checked);
     audio.unlock();
     audio.setMaster(cfg.masterVolume);
     renderer.resize(isTouch());
-    if (elStatFps) elStatFps.hidden = cfg.showFps !== true;
+    if (elFpsHud) elFpsHud.hidden = cfg.showFps !== true;
   };
 
   const openSettings = () => {
@@ -446,6 +449,7 @@
       root.config.infiniteCoins = true;
       root.config.infiniteGems = true;
       root.config.infiniteAmmo = true;
+      root.config.invincible = false;
       syncSettingsForm();
     });
   }
@@ -456,7 +460,7 @@
       const dtRaw = (t - last) / 1000;
       const dt = clamp(dtRaw, 0, 0.033);
       last = t;
-      fpsSmoothed = fpsSmoothed * 0.92 + (1 / Math.max(0.001, dtRaw)) * 0.08;
+      fpsInstant = 1 / Math.max(0.001, dtRaw);
       shake.update(dt);
       input.recomputeMove();
 
@@ -507,10 +511,10 @@
         game.render(hiCtx, viewW, viewH, renderer.atlas);
       });
 
-      if (elStatFps && elTxtFps) {
+      if (elFpsHud && elTxtFps) {
         const on = root.config?.showFps === true;
-        elStatFps.hidden = !on;
-        if (on) elTxtFps.textContent = String(Math.round(fpsSmoothed));
+        elFpsHud.hidden = !on;
+        if (on) elTxtFps.textContent = fpsInstant.toFixed(1);
       }
 
       input.resetFrame();
@@ -521,7 +525,7 @@
 
   const boot = () => {
     renderer.resize(isTouch());
-    if (elStatFps) elStatFps.hidden = root.config?.showFps !== true;
+    if (elFpsHud) elFpsHud.hidden = root.config?.showFps !== true;
     ui.renderLeaderboard();
     ui.setUIState(game.state);
     requestAnimationFrame(step);

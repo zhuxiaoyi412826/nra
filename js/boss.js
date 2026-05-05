@@ -2,6 +2,7 @@
   const root = (window.Shooter = window.Shooter || {});
   const { clamp, norm, rand } = root.util;
   const WORLD = root.WORLD;
+  const GAME_SCALE = Math.max(0.5, Math.min(3, Number(root.constants?.GAME_SCALE ?? 1) || 1));
 
   class Boss {
     constructor() {
@@ -107,8 +108,8 @@
         const a = base + (i / count) * Math.PI * 2;
         const b = bullets.acquire();
         b.init({
-          x: this.x + Math.cos(a) * (this.r + 8),
-          y: this.y + Math.sin(a) * (this.r + 8),
+          x: this.x + Math.cos(a) * (this.r + 8 * GAME_SCALE),
+          y: this.y + Math.sin(a) * (this.r + 8 * GAME_SCALE),
           vx: Math.cos(a) * speed,
           vy: Math.sin(a) * speed,
           dmg,
@@ -164,7 +165,7 @@
       this.x = clamp(this.x, this.r, WORLD.w - this.r);
       this.y = clamp(this.y, this.r, WORLD.h - this.r);
 
-      if (dist < this.r + player.r + 6 && this.contactCd <= 0) {
+      if (dist < this.r + player.r + 6 * GAME_SCALE && this.contactCd <= 0) {
         this.contactCd = 0.7;
         player.takeDamage(16 + difficulty * 2 + (this.phase >= 2 ? 6 : 0), { x: dir.x, y: dir.y }, audio);
         if (emit) emit.hurtPlayer(player.x, player.y);

@@ -78,7 +78,10 @@
       med: { name: "急救包", color: "#ff7b7b" },
       food: { name: "食物", color: "#9bff53" },
       water: { name: "清水", color: "#53a9ff" },
+      weapon: { name: "武器箱", color: "#ff6fb0" },
+      buff: { name: "增益", color: "#ffd36f" },
     },
+    GAME_SCALE: 2, // 游戏缩放比例
   };
 
   root.config = {
@@ -90,6 +93,7 @@
     showFps: false,
     masterVolume: 0.5,
     ambientMul: 1,
+    invincible: false,
   };
 
   class AudioEngine {

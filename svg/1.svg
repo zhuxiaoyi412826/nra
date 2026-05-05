@@ -1,0 +1,86 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="180" height="280" viewBox="0 0 180 280">
+  <defs>
+    <!-- 渐变配色 -->
+    <linearGradient id="skin" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#ffd9c2"/>
+      <stop offset="100%" stop-color="#e2b090"/>
+    </linearGradient>
+    <linearGradient id="hair" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#707580"/>
+      <stop offset="100%" stop-color="#454a55"/>
+    </linearGradient>
+    <linearGradient id="cloth" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#555a65"/>
+      <stop offset="100%" stop-color="#2c303a"/>
+    </linearGradient>
+    <linearGradient id="pants" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#655e5e"/>
+      <stop offset="100%" stop-color="#383232"/>
+    </linearGradient>
+    <linearGradient id="fire" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#fff2aa"/>
+      <stop offset="100%" stop-color="#ff8822"/>
+    </linearGradient>
+
+    <!-- 枪震动动画 -->
+    <animateTransform id="gunShake" attributeName="transform" type="translate"
+      values="0 0; 1 -1; -1 1; 0 0" dur="0.2s" repeatCount="indefinite"/>
+    <!-- 枪口火光闪烁动画 -->
+    <animate id="fireFlash" attributeName="opacity"
+      values="0;1;0.6;1;0" dur="0.4s" repeatCount="indefinite"/>
+  </defs>
+
+  <!-- 人物整体容器 -->
+  <g transform="translate(30,20)">
+    <!-- 头发 -->
+    <rect x="0" y="0" width="55" height="18" fill="url(#hair)"/>
+    <rect x="0" y="18" width="12" height="35" fill="url(#hair)"/>
+    <rect x="43" y="18" width="12" height="35" fill="url(#hair)"/>
+
+    <!-- 脸部皮肤 -->
+    <rect x="12" y="18" width="31" height="35" fill="url(#skin)"/>
+    
+    <!-- 眼睛 -->
+    <rect x="16" y="26" width="8" height="8" fill="#fff"/>
+    <rect x="39" y="26" width="8" height="8" fill="#fff"/>
+    <rect x="19" y="29" width="3" height="3" fill="#222"/>
+    <rect x="42" y="29" width="3" height="3" fill="#222"/>
+
+    <!-- 脖子 -->
+    <rect x="22" y="52" width="11" height="6" fill="url(#skin)"/>
+
+    <!-- 身体上衣 -->
+    <rect x="12" y="58" width="31" height="38" fill="url(#cloth)"/>
+    <!-- 腰带 -->
+    <rect x="12" y="92" width="31" height="6" fill="#965420"/>
+
+    <!-- 左手 -->
+    <rect x="43" y="62" width="12" height="32" fill="url(#cloth)"/>
+    <rect x="43" y="90" width="12" height="10" fill="url(#skin)"/>
+
+    <!-- 右手 + 枪整体（带动画） -->
+    <g transform="translate(0,0)">
+      <animateTransform href="#gunShake"/>
+      <!-- 右手臂 -->
+      <rect x="-10" y="62" width="12" height="32" fill="url(#cloth)"/>
+      <rect x="-10" y="90" width="12" height="10" fill="url(#skin)"/>
+      
+      <!-- 枪械模型 -->
+      <rect x="-45" y="72" width="38" height="10" fill="#222"/>
+      <rect x="-52" y="75" width="8" height="4" fill="#333"/>
+      <rect x="-15" y="68" width="6" height="18" fill="#2a2a2a"/>
+      
+      <!-- 枪口火光 闪烁 -->
+      <rect x="-58" y="70" width="8" height="12" fill="url(#fire)" opacity="0">
+        <animate href="#fireFlash"/>
+      </rect>
+    </g>
+
+    <!-- 裤子腿部 -->
+    <rect x="12" y="98" width="14" height="36" fill="url(#pants)"/>
+    <rect x="29" y="98" width="14" height="36" fill="url(#pants)"/>
+    <!-- 鞋子 -->
+    <rect x="12" y="132" width="14" height="8" fill="#282222"/>
+    <rect x="29" y="132" width="14" height="8" fill="#282222"/>
+  </g>
+</svg>
