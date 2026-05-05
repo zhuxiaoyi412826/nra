@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no" />
-    <title>射击小游戏</title>
+    <title>霓虹夜袭（NRA）</title>
     <link rel="stylesheet" href="./styles.css" />
   </head>
   <body>
@@ -43,6 +43,7 @@
             <div class="stat"><span class="k">击杀</span><span id="txt-kills" class="v">0</span></div>
             <div class="stat"><span class="k">金币</span><span id="txt-coins" class="v">0</span></div>
             <div class="stat"><span class="k">钻石</span><span id="txt-gems" class="v">0</span></div>
+            <div id="stat-fps" class="stat" hidden><span class="k">FPS</span><span id="txt-fps" class="v">0</span></div>
           </div>
           <div class="stats specials">
             <div class="stat"><span class="k">Q 手雷</span><span id="txt-sp-q" class="v">就绪</span></div>
@@ -68,6 +69,7 @@
             <canvas id="minimap" width="220" height="160" aria-label="minimap"></canvas>
             <div class="minimap-actions">
               <button id="btn-open-shop" class="btn mini">打开商店（B）</button>
+              <button id="btn-open-settings" class="btn mini">设置</button>
             </div>
           </div>
         </div>
@@ -75,11 +77,12 @@
 
       <div id="menu" class="overlay">
         <div class="panel">
-          <h1 class="title">射击小游戏</h1>
-          <div class="subtitle">WASD/方向键移动，鼠标瞄准，左键射击，R 换弹，Q/1/2 切枪，Esc 暂停</div>
+          <h1 class="title">霓虹夜袭 <span class="abbr">NRA</span></h1>
+          <div class="subtitle">俯视角像素射击：刷怪、精英、BOSS、武器与技能。建议先打开“操作说明”。</div>
           <div class="actions">
             <button id="btn-start" class="btn primary">开始游戏</button>
             <button id="btn-how" class="btn">操作说明</button>
+            <button id="btn-settings" class="btn">设置</button>
             <button id="btn-reset" class="btn danger">清空本地榜</button>
           </div>
           <div id="howto" class="howto" hidden>
@@ -102,6 +105,7 @@
           <h2 class="title">已暂停</h2>
           <div class="actions">
             <button id="btn-resume" class="btn primary">继续</button>
+            <button id="btn-pause-settings" class="btn">设置</button>
             <button id="btn-restart" class="btn">重新开始</button>
             <button id="btn-back" class="btn">返回主菜单</button>
           </div>
@@ -114,6 +118,7 @@
           <div class="subtitle">使用金币/钻石购买补给与升级（B 或 Esc 关闭）</div>
           <div class="actions">
             <button id="btn-shop-close" class="btn primary">继续游戏</button>
+            <button id="btn-shop-settings" class="btn">设置</button>
             <button id="btn-shop-restart" class="btn">重新开始</button>
             <button id="btn-shop-back" class="btn">返回主菜单</button>
           </div>
@@ -134,7 +139,73 @@
           <div id="dead-summary" class="summary"></div>
           <div class="actions">
             <button id="btn-again" class="btn primary">再来一局</button>
+            <button id="btn-dead-settings" class="btn">设置</button>
             <button id="btn-dead-back" class="btn">返回主菜单</button>
+          </div>
+        </div>
+      </div>
+
+      <div id="settings" class="overlay" hidden>
+        <div class="panel">
+          <h2 class="title">设置</h2>
+          <div class="subtitle">调整画面与音量等参数（应用后立即生效）。</div>
+
+          <div class="settings-grid">
+            <div class="settings-section">
+              <div class="settings-title">画面</div>
+              <label class="field">
+                <span class="label">像素尺度</span>
+                <select id="set-pixel" class="control">
+                  <option value="0">自动</option>
+                  <option value="2">2</option>
+                  <option value="3">3</option>
+                  <option value="4">4</option>
+                  <option value="5">5</option>
+                </select>
+              </label>
+              <label class="field check">
+                <input id="set-shake" type="checkbox" />
+                <span class="label">震屏</span>
+              </label>
+              <label class="field check">
+                <input id="set-fps" type="checkbox" />
+                <span class="label">显示 FPS</span>
+              </label>
+            </div>
+
+            <div class="settings-section">
+              <div class="settings-title">音频</div>
+              <label class="field">
+                <span class="label">主音量</span>
+                <input id="set-vol" class="control" type="range" min="0" max="100" step="1" />
+              </label>
+              <label class="field">
+                <span class="label">环境音量</span>
+                <input id="set-amb" class="control" type="range" min="0" max="100" step="1" />
+              </label>
+            </div>
+
+            <div class="settings-section">
+              <div class="settings-title">调试</div>
+              <label class="field check">
+                <input id="set-inf-coins" type="checkbox" />
+                <span class="label">无限金币</span>
+              </label>
+              <label class="field check">
+                <input id="set-inf-gems" type="checkbox" />
+                <span class="label">无限钻石</span>
+              </label>
+              <label class="field check">
+                <input id="set-inf-ammo" type="checkbox" />
+                <span class="label">无限弹药</span>
+              </label>
+            </div>
+          </div>
+
+          <div class="actions">
+            <button id="btn-settings-apply" class="btn primary">应用并返回</button>
+            <button id="btn-settings-defaults" class="btn">恢复默认</button>
+            <button id="btn-settings-close" class="btn">取消</button>
           </div>
         </div>
       </div>
@@ -149,6 +220,7 @@
           <button id="btn-reload" class="btn touch-btn">换弹</button>
           <button id="btn-swap" class="btn touch-btn">切枪</button>
           <button id="btn-shop" class="btn touch-btn">商店</button>
+          <button id="btn-touch-settings" class="btn touch-btn">设置</button>
           <button id="btn-pause" class="btn touch-btn">暂停</button>
         </div>
       </div>

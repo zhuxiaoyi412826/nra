@@ -7,6 +7,7 @@
   const elPause = document.getElementById("pause");
   const elShop = document.getElementById("shop");
   const elDead = document.getElementById("dead");
+  const elSettings = document.getElementById("settings");
   const elHud = document.getElementById("hud");
   const elTouch = document.getElementById("touch");
   const elHowTo = document.getElementById("howto");
@@ -47,6 +48,8 @@
   if (mmCtx) mmCtx.imageSmoothingEnabled = false;
 
   const isTouch = () => window.matchMedia && window.matchMedia("(pointer: coarse)").matches;
+
+  let settingsOpen = false;
 
   const LBS_KEY = "shooter_lb_v1";
   const loadLeaderboard = () => {
@@ -358,15 +361,28 @@
   };
 
   const setUIState = (state) => {
-    elMenu.hidden = state !== "menu";
-    elPause.hidden = state !== "paused";
-    elShop.hidden = state !== "shop";
-    elDead.hidden = state !== "dead";
+    elMenu.hidden = state !== "menu" || settingsOpen;
+    elPause.hidden = state !== "paused" || settingsOpen;
+    elShop.hidden = state !== "shop" || settingsOpen;
+    elDead.hidden = state !== "dead" || settingsOpen;
+    if (elSettings) elSettings.hidden = !settingsOpen;
     elHud.hidden = state !== "playing" && state !== "paused" && state !== "shop";
     const t = isTouch();
     elTouch.hidden = !t || (state !== "playing" && state !== "paused" && state !== "shop");
     if (t) document.body.classList.add("touch");
   };
+
+  const openSettings = () => {
+    if (!elSettings) return;
+    settingsOpen = true;
+  };
+
+  const closeSettings = () => {
+    if (!elSettings) return;
+    settingsOpen = false;
+  };
+
+  const isSettingsOpen = () => settingsOpen;
 
   const updateHud = (game) => {
     const p = game.player;
@@ -424,5 +440,8 @@
     renderShop,
     renderMinimap,
     toast,
+    openSettings,
+    closeSettings,
+    isSettingsOpen,
   };
 })();

@@ -85,6 +85,11 @@
     infiniteCoins: true,
     infiniteGems: true,
     infiniteAmmo: true,
+    pixelScale: 0,
+    screenShake: true,
+    showFps: false,
+    masterVolume: 0.5,
+    ambientMul: 1,
   };
 
   class AudioEngine {
@@ -100,7 +105,7 @@
       if (!this.ctx) this.ctx = new (window.AudioContext || window.webkitAudioContext)();
       if (!this.master) {
         this.master = this.ctx.createGain();
-        this.master.gain.value = 0.5;
+        this.master.gain.value = clamp(root.config?.masterVolume ?? 0.5, 0, 1);
         this.master.connect(this.ctx.destination);
       }
       return this.ctx;
@@ -288,7 +293,8 @@
       if (!this.unlocked || !this.ambientGain) return;
       const c = this.ensure();
       const t0 = c.currentTime;
-      const v = clamp(level, 0, 1) * 0.18;
+      const mul = clamp(root.config?.ambientMul ?? 1, 0, 1);
+      const v = clamp(level, 0, 1) * 0.18 * mul;
       this.ambientGain.gain.cancelScheduledValues(t0);
       this.ambientGain.gain.setValueAtTime(this.ambientGain.gain.value, t0);
       this.ambientGain.gain.exponentialRampToValueAtTime(Math.max(0.0001, v), t0 + 0.12);

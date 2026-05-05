@@ -136,6 +136,9 @@
       this.atlas = new SpriteAtlas();
     }
     currentPixelScale(isTouch) {
+      const cfg = window.Shooter?.config;
+      const v = Number(cfg?.pixelScale || 0);
+      if (Number.isFinite(v) && v >= 1) return Math.max(1, Math.min(6, Math.floor(v)));
       return isTouch ? 2 : 3;
     }
     resize(isTouch) {

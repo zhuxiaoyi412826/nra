@@ -316,6 +316,8 @@ canvas#minimap {
 .minimap-actions {
   margin-top: 8px;
   display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
   justify-content: flex-end;
   pointer-events: auto;
 }
@@ -378,11 +380,88 @@ canvas#minimap {
   font-size: 28px;
 }
 
+.abbr {
+  font-size: 13px;
+  opacity: 0.8;
+  margin-left: 8px;
+  padding: 3px 8px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.06);
+  vertical-align: middle;
+}
+
 .subtitle {
   opacity: 0.85;
   margin-bottom: 12px;
   line-height: 1.4;
   font-size: 13px;
+}
+
+.settings-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 10px;
+  margin: 10px 0 14px;
+}
+
+.settings-section {
+  padding: 10px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.settings-title {
+  font-size: 12px;
+  opacity: 0.85;
+  margin-bottom: 8px;
+}
+
+.field {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 0;
+  font-size: 13px;
+}
+
+.field + .field {
+  border-top: 1px dashed rgba(255, 255, 255, 0.12);
+}
+
+.field .label {
+  opacity: 0.9;
+}
+
+.field .control {
+  min-width: 180px;
+}
+
+select.control,
+input.control[type="range"] {
+  appearance: none;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(0, 0, 0, 0.18);
+  color: #e6edf3;
+  padding: 8px 10px;
+  font-size: 13px;
+}
+
+input.control[type="range"] {
+  padding: 0;
+  height: 34px;
+}
+
+.field.check {
+  justify-content: flex-start;
+}
+
+.field.check input {
+  width: 16px;
+  height: 16px;
 }
 
 .actions {
@@ -618,6 +697,9 @@ canvas#minimap {
     grid-template-columns: 1fr;
   }
   .howto-grid {
+    grid-template-columns: 1fr;
+  }
+  .settings-grid {
     grid-template-columns: 1fr;
   }
   .shop-list {

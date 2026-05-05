@@ -381,6 +381,7 @@
       this.mag = 0;
     }
     kick(mag) {
+      if (root.config?.screenShake === false) return;
       this.t = Math.min(0.22, this.t + 0.08);
       this.mag = Math.min(8, this.mag + mag);
     }
@@ -389,6 +390,7 @@
       this.mag = Math.max(0, this.mag - dt * 26);
     }
     offset() {
+      if (root.config?.screenShake === false) return { x: 0, y: 0 };
       if (this.t <= 0 || this.mag <= 0) return { x: 0, y: 0 };
       const a = this.mag * (this.t / 0.22);
       return { x: (Math.random() * 2 - 1) * a, y: (Math.random() * 2 - 1) * a };

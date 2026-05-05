@@ -29,6 +29,27 @@
   const btnShopRestart = document.getElementById("btn-shop-restart");
   const btnShopBack = document.getElementById("btn-shop-back");
   const btnOpenShop = document.getElementById("btn-open-shop");
+  const btnOpenSettings = document.getElementById("btn-open-settings");
+  const btnSettings = document.getElementById("btn-settings");
+  const btnPauseSettings = document.getElementById("btn-pause-settings");
+  const btnShopSettings = document.getElementById("btn-shop-settings");
+  const btnDeadSettings = document.getElementById("btn-dead-settings");
+  const btnTouchSettings = document.getElementById("btn-touch-settings");
+
+  const btnSettingsApply = document.getElementById("btn-settings-apply");
+  const btnSettingsDefaults = document.getElementById("btn-settings-defaults");
+  const btnSettingsClose = document.getElementById("btn-settings-close");
+  const setPixel = document.getElementById("set-pixel");
+  const setShake = document.getElementById("set-shake");
+  const setFps = document.getElementById("set-fps");
+  const setVol = document.getElementById("set-vol");
+  const setAmb = document.getElementById("set-amb");
+  const setInfCoins = document.getElementById("set-inf-coins");
+  const setInfGems = document.getElementById("set-inf-gems");
+  const setInfAmmo = document.getElementById("set-inf-ammo");
+
+  const elStatFps = document.getElementById("stat-fps");
+  const elTxtFps = document.getElementById("txt-fps");
   const elHowTo = ui.elHowTo;
 
   const isTouch = () => window.matchMedia && window.matchMedia("(pointer: coarse)").matches;
@@ -85,6 +106,52 @@
 
   const input = new Input();
   let lastUiState = game.state;
+  let settingsReturnState = null;
+  let fpsSmoothed = 60;
+
+  const syncSettingsForm = () => {
+    const cfg = root.config || {};
+    if (setPixel) setPixel.value = String(cfg.pixelScale ?? 0);
+    if (setShake) setShake.checked = cfg.screenShake !== false;
+    if (setFps) setFps.checked = cfg.showFps === true;
+    if (setVol) setVol.value = String(Math.round(clamp(cfg.masterVolume ?? 0.5, 0, 1) * 100));
+    if (setAmb) setAmb.value = String(Math.round(clamp(cfg.ambientMul ?? 1, 0, 1) * 100));
+    if (setInfCoins) setInfCoins.checked = cfg.infiniteCoins !== false;
+    if (setInfGems) setInfGems.checked = cfg.infiniteGems !== false;
+    if (setInfAmmo) setInfAmmo.checked = cfg.infiniteAmmo !== false;
+  };
+
+  const applySettings = () => {
+    const cfg = root.config || (root.config = {});
+    if (setPixel) cfg.pixelScale = Number(setPixel.value || 0) || 0;
+    if (setShake) cfg.screenShake = Boolean(setShake.checked);
+    if (setFps) cfg.showFps = Boolean(setFps.checked);
+    if (setVol) cfg.masterVolume = clamp(Number(setVol.value || 50) / 100, 0, 1);
+    if (setAmb) cfg.ambientMul = clamp(Number(setAmb.value || 100) / 100, 0, 1);
+    if (setInfCoins) cfg.infiniteCoins = Boolean(setInfCoins.checked);
+    if (setInfGems) cfg.infiniteGems = Boolean(setInfGems.checked);
+    if (setInfAmmo) cfg.infiniteAmmo = Boolean(setInfAmmo.checked);
+    audio.unlock();
+    audio.setMaster(cfg.masterVolume);
+    renderer.resize(isTouch());
+    if (elStatFps) elStatFps.hidden = cfg.showFps !== true;
+  };
+
+  const openSettings = () => {
+    audio.unlock();
+    audio.ui();
+    settingsReturnState = game.state;
+    if (settingsReturnState === "playing") game.pause();
+    syncSettingsForm();
+    ui.openSettings();
+  };
+
+  const closeSettings = (shouldApply) => {
+    if (shouldApply) applySettings();
+    ui.closeSettings();
+    if (settingsReturnState === "playing" && game.state === "paused") game.resume();
+    settingsReturnState = null;
+  };
 
   const equipWeaponByKey = (weaponKey) => {
     const w = root.constants.WEAPONS[weaponKey];
@@ -279,6 +346,11 @@
     audio.ui();
     elHowTo.hidden = !elHowTo.hidden;
   });
+  if (btnSettings) {
+    btnSettings.addEventListener("click", () => {
+      openSettings();
+    });
+  }
   btnReset.addEventListener("click", () => {
     audio.unlock();
     audio.ui();
@@ -290,6 +362,11 @@
     audio.ui();
     game.resume();
   });
+  if (btnPauseSettings) {
+    btnPauseSettings.addEventListener("click", () => {
+      openSettings();
+    });
+  }
   btnRestart.addEventListener("click", () => {
     audio.unlock();
     audio.ui();
@@ -310,10 +387,20 @@
     audio.ui();
     game.backToMenu();
   });
+  if (btnDeadSettings) {
+    btnDeadSettings.addEventListener("click", () => {
+      openSettings();
+    });
+  }
   btnShopClose.addEventListener("click", () => {
     audio.unlock();
     game.closeShop();
   });
+  if (btnShopSettings) {
+    btnShopSettings.addEventListener("click", () => {
+      openSettings();
+    });
+  }
   btnShopRestart.addEventListener("click", () => {
     audio.unlock();
     audio.ui();
@@ -329,17 +416,57 @@
     audio.ui();
     input.shopPressed = true;
   });
+  if (btnOpenSettings) {
+    btnOpenSettings.addEventListener("click", () => {
+      openSettings();
+    });
+  }
+  if (btnTouchSettings) {
+    btnTouchSettings.addEventListener("click", () => {
+      openSettings();
+    });
+  }
+  if (btnSettingsApply) {
+    btnSettingsApply.addEventListener("click", () => {
+      closeSettings(true);
+    });
+  }
+  if (btnSettingsClose) {
+    btnSettingsClose.addEventListener("click", () => {
+      closeSettings(false);
+    });
+  }
+  if (btnSettingsDefaults) {
+    btnSettingsDefaults.addEventListener("click", () => {
+      root.config.pixelScale = 0;
+      root.config.screenShake = true;
+      root.config.showFps = false;
+      root.config.masterVolume = 0.5;
+      root.config.ambientMul = 1;
+      root.config.infiniteCoins = true;
+      root.config.infiniteGems = true;
+      root.config.infiniteAmmo = true;
+      syncSettingsForm();
+    });
+  }
 
   const step = (() => {
     let last = performance.now();
     return (t) => {
-      const dt = clamp((t - last) / 1000, 0, 0.033);
+      const dtRaw = (t - last) / 1000;
+      const dt = clamp(dtRaw, 0, 0.033);
       last = t;
+      fpsSmoothed = fpsSmoothed * 0.92 + (1 / Math.max(0.001, dtRaw)) * 0.08;
       shake.update(dt);
       input.recomputeMove();
 
       renderer.render((hiCtx, viewW, viewH) => {
-        if (game.state === "playing") {
+        if (ui.isSettingsOpen && ui.isSettingsOpen()) {
+          input.fireHeld = false;
+          if (input.pausePressed || input.shopPressed) closeSettings(false);
+          game.updateCamera(viewW, viewH, shake);
+          game.updateAim(input, canvas, viewW, viewH);
+        } else if (game.state === "playing") {
           if (input.pausePressed) {
             input.fireHeld = false;
             game.pause();
@@ -380,6 +507,12 @@
         game.render(hiCtx, viewW, viewH, renderer.atlas);
       });
 
+      if (elStatFps && elTxtFps) {
+        const on = root.config?.showFps === true;
+        elStatFps.hidden = !on;
+        if (on) elTxtFps.textContent = String(Math.round(fpsSmoothed));
+      }
+
       input.resetFrame();
       lastUiState = game.state;
       requestAnimationFrame(step);
@@ -388,6 +521,7 @@
 
   const boot = () => {
     renderer.resize(isTouch());
+    if (elStatFps) elStatFps.hidden = root.config?.showFps !== true;
     ui.renderLeaderboard();
     ui.setUIState(game.state);
     requestAnimationFrame(step);
