@@ -20,6 +20,7 @@
     constructor() {
       this.cache = new Map();
       this.player = this.makePlayer();
+      this.barrel = this.makeBarrel();
       this.enemy = {
         basic: this.makeEnemy("#c7d2fe", "#1a2230", false),
         fast: this.makeEnemy("#ff9b53", "#2a1c10", true),
@@ -33,8 +34,14 @@
         ranged: this.makeElite(this.enemy.ranged),
       };
       this.boss = {
-        idle: this.makeBoss("#7ad0ff", "#11222e"),
-        enraged: this.makeBoss("#ff6fb0", "#2b1220"),
+        core: {
+          idle: this.makeBoss("#7ad0ff", "#11222e"),
+          enraged: this.makeBoss("#ff6fb0", "#2b1220"),
+        },
+        gunslinger: {
+          idle: this.makeGunnerBoss({ coat: "#3c404a", skin: "#ffd9c2", hair: "#555a65", belt: "#965420", gun: "#222222", fire: "#ff8822" }),
+          enraged: this.makeGunnerBoss({ coat: "#2b1220", skin: "#ffd9c2", hair: "#3a2a35", belt: "#ff6fb0", gun: "#1a1116", fire: "#ffd36f" }),
+        },
       };
     }
     makePlayer() {
@@ -54,6 +61,21 @@
       ctx.strokeStyle = "rgba(0,0,0,0.35)";
       ctx.lineWidth = 2;
       ctx.strokeRect(11, 9, 10, 15);
+      return c;
+    }
+    makeBarrel() {
+      const c = mkCanvas(32, 32);
+      const ctx = c.getContext("2d");
+      ctx.imageSmoothingEnabled = false;
+      ctx.clearRect(0, 0, 32, 32);
+      pxRect(ctx, 8, 4, 16, 24, "#8a2424"); // Main red body
+      pxRect(ctx, 6, 8, 20, 4, "#333333"); // Top metal band
+      pxRect(ctx, 6, 20, 20, 4, "#333333"); // Bottom metal band
+      pxRect(ctx, 14, 14, 4, 4, "#dd9922"); // Warning label
+      pxRect(ctx, 12, 4, 8, 2, "#555555"); // Lid
+      ctx.strokeStyle = "rgba(0,0,0,0.5)";
+      ctx.lineWidth = 2;
+      ctx.strokeRect(6, 2, 20, 28);
       return c;
     }
     makeEnemy(body, shadow, lean, bulky) {
@@ -117,6 +139,79 @@
       ctx.strokeRect(16, 14, 32, 36);
       return c;
     }
+
+    makeGunnerBoss(pal) {
+      const c = mkCanvas(64, 64);
+      const ctx = c.getContext("2d");
+      ctx.imageSmoothingEnabled = false;
+      ctx.clearRect(0, 0, 64, 64);
+      
+      const hat = pal.coat || "#2a2826";
+      const skin = pal.skin || "#ffd9c2";
+      const coat = pal.coat || "#3c404a";
+      const shirt = "#8a1a1a";
+      const belt = pal.belt || "#422810";
+      const gun = pal.gun || "#181818";
+      const metal = "#888888";
+      const fire = pal.fire || "#ffaa00";
+
+      // Shadow
+      pxRect(ctx, 16, 52, 32, 8, "rgba(0,0,0,0.3)");
+
+      // Legs
+      pxRect(ctx, 22, 42, 8, 14, "#222");
+      pxRect(ctx, 34, 42, 8, 14, "#222");
+      // Boots
+      pxRect(ctx, 20, 52, 10, 6, "#111");
+      pxRect(ctx, 34, 52, 10, 6, "#111");
+
+      // Coat & Shirt
+      pxRect(ctx, 18, 22, 28, 20, coat);
+      pxRect(ctx, 24, 22, 16, 20, shirt);
+      pxRect(ctx, 18, 40, 6, 8, coat);
+      pxRect(ctx, 40, 40, 6, 8, coat);
+      
+      // Belt & Buckle
+      pxRect(ctx, 22, 38, 20, 4, belt);
+      pxRect(ctx, 30, 37, 4, 6, "#ddaa00");
+
+      // Left Arm & Gun (Holding a big shotgun/rifle)
+      pxRect(ctx, 12, 24, 6, 14, coat);
+      pxRect(ctx, 12, 38, 6, 4, skin);
+      pxRect(ctx, 4, 34, 18, 6, gun); // Gun barrel
+      pxRect(ctx, 2, 35, 4, 4, metal);
+      pxRect(ctx, 18, 36, 6, 8, gun); // Gun stock
+      if (pal.fire) {
+        pxRect(ctx, -6, 32, 10, 10, fire); // Muzzle flash
+        pxRect(ctx, -2, 34, 6, 6, "#ffffff");
+      }
+
+      // Right Arm & Gun (Holding a revolver/grenade)
+      pxRect(ctx, 46, 24, 6, 14, coat);
+      pxRect(ctx, 46, 38, 6, 4, skin);
+      pxRect(ctx, 48, 40, 4, 8, gun);
+
+      // Head
+      pxRect(ctx, 24, 12, 16, 12, skin);
+      
+      // Eyes/Bandana
+      pxRect(ctx, 24, 18, 16, 6, "#111111"); // Bandana covering mouth
+      pxRect(ctx, 26, 14, 4, 2, "#fff"); // Eye L
+      pxRect(ctx, 34, 14, 4, 2, "#fff"); // Eye R
+      pxRect(ctx, 27, 14, 2, 2, "#d22"); // Pupil L
+      pxRect(ctx, 35, 14, 2, 2, "#d22"); // Pupil R
+
+      // Cowboy Hat
+      pxRect(ctx, 16, 10, 32, 4, hat);
+      pxRect(ctx, 20, 4, 24, 6, hat);
+      pxRect(ctx, 20, 8, 24, 2, "#8a1a1a"); // Hat band
+
+      ctx.strokeStyle = "rgba(0,0,0,0.5)";
+      ctx.lineWidth = 2;
+      ctx.strokeRect(16, 8, 32, 50);
+
+      return c;
+    }
   }
 
   class PixelRenderer {
@@ -175,7 +270,7 @@
     }
   }
 
-  const drawWorld = (ctx, world, cam, viewW, viewH) => {
+  const drawWorld = (ctx, world, cam, viewW, viewH, atlas) => {
     ctx.fillStyle = "#0a1118";
     ctx.fillRect(0, 0, viewW, viewH);
     const grid = 60;
@@ -197,6 +292,36 @@
       ctx.lineTo(viewW, sy);
       ctx.stroke();
     }
+
+    if (world.details) {
+      for (const d of world.details) {
+        const sx = d.x - cam.x;
+        const sy = d.y - cam.y;
+        if (sx < -100 || sy < -100 || sx > viewW + 100 || sy > viewH + 100) continue;
+        ctx.save();
+        ctx.translate(sx, sy);
+        ctx.rotate(d.rot);
+        ctx.fillStyle = d.type === 'grass' ? `rgba(40,200,80,${d.opacity})` : `rgba(255,255,255,${d.opacity})`;
+        if (d.type === 'tile') {
+          ctx.fillRect(-d.size/2, -d.size/2, d.size, d.size);
+          ctx.strokeStyle = `rgba(0,0,0,${d.opacity*2})`;
+          ctx.lineWidth = 1;
+          ctx.strokeRect(-d.size/2, -d.size/2, d.size, d.size);
+        } else if (d.type === 'grass') {
+          ctx.fillRect(-2, -d.size, 4, d.size);
+        } else if (d.type === 'crack') {
+          ctx.beginPath();
+          ctx.moveTo(0, 0);
+          ctx.lineTo(d.size/2, d.size/3);
+          ctx.lineTo(d.size, -d.size/4);
+          ctx.strokeStyle = `rgba(0,0,0,${d.opacity*4})`;
+          ctx.lineWidth = 2;
+          ctx.stroke();
+        }
+        ctx.restore();
+      }
+    }
+
     for (const ob of world.obstacles) {
       const sx = ob.x - cam.x;
       const sy = ob.y - cam.y;
@@ -205,6 +330,16 @@
       ctx.strokeStyle = "rgba(255,255,255,0.12)";
       ctx.lineWidth = 2;
       ctx.strokeRect(sx, sy, ob.w, ob.h);
+    }
+
+    if (world.barrels) {
+      for (const b of world.barrels) {
+        if (!b.active) continue;
+        const sx = b.x - cam.x;
+        const sy = b.y - cam.y;
+        if (sx < -50 || sy < -50 || sx > viewW + 50 || sy > viewH + 50) continue;
+        ctx.drawImage(atlas.barrel, Math.round(sx - 16*GAME_SCALE), Math.round(sy - 16*GAME_SCALE), 32*GAME_SCALE, 32*GAME_SCALE);
+      }
     }
   };
 
@@ -392,18 +527,26 @@
     const sx = boss.x - cam.x;
     const sy = boss.y - cam.y;
     const enraged = boss.phase >= 2;
-    const spr = enraged ? atlas.boss.enraged : atlas.boss.idle;
-    const pulse = 0.5 + 0.5 * Math.sin((boss.t ?? 0) * 3.2);
-    const aura = enraged ? `rgba(255,111,176,${0.18 + pulse * 0.12})` : `rgba(122,208,255,${0.16 + pulse * 0.1})`;
-    ctx.fillStyle = aura;
-    ctx.beginPath();
-    ctx.arc(sx, sy, boss.r + 22, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.strokeStyle = enraged ? "rgba(255,111,176,0.55)" : "rgba(122,208,255,0.5)";
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.arc(sx, sy, boss.r + 14, 0, Math.PI * 2);
-    ctx.stroke();
+    const pack = (atlas.boss && (atlas.boss[boss.kind] || atlas.boss.core)) || atlas.boss;
+    const spr = enraged ? pack.enraged : pack.idle;
+
+    if (boss.kind !== "gunslinger") {
+      const pulse = 0.5 + 0.5 * Math.sin((boss.t ?? 0) * 3.2);
+      const auraCore = [122, 208, 255];
+      const auraEnr = [255, 111, 176];
+      const auraRGB = enraged ? auraEnr : auraCore;
+      const aura = `rgba(${auraRGB[0]},${auraRGB[1]},${auraRGB[2]},${(enraged ? 0.18 : 0.16) + pulse * (enraged ? 0.12 : 0.1)})`;
+      ctx.fillStyle = aura;
+      ctx.beginPath();
+      ctx.arc(sx, sy, boss.r + 22, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = enraged ? "rgba(255,111,176,0.55)" : "rgba(122,208,255,0.5)";
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(sx, sy, boss.r + 14, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+
     ctx.globalAlpha = boss.hitFlash > 0 ? 0.6 : 1;
     ctx.drawImage(spr, Math.round(sx - spr.width / 2), Math.round(sy - spr.height / 2));
     ctx.globalAlpha = 1;
@@ -452,6 +595,68 @@
     ctx.stroke();
   };
 
+  const drawIndicators = (ctx, gameplay, cam, viewW, viewH) => {
+    const margin = 30;
+    const cx = viewW / 2;
+    const cy = viewH / 2;
+    
+    const drawPointer = (x, y, color, isBoss) => {
+      const dx = x - (cam.x + cx);
+      const dy = y - (cam.y + cy);
+      // Only show if off-screen
+      if (Math.abs(dx) < cx && Math.abs(dy) < cy) return;
+      
+      const angle = Math.atan2(dy, dx);
+      let px = cx + Math.cos(angle) * (cx - margin);
+      let py = cy + Math.sin(angle) * (cy - margin);
+      
+      // Clamp to screen edges properly
+      const boundX = cx - margin;
+      const boundY = cy - margin;
+      if (Math.abs(Math.cos(angle)) > 0.001) {
+        const t = boundX / Math.abs(Math.cos(angle));
+        if (t * Math.abs(Math.sin(angle)) <= boundY) {
+          px = cx + Math.sign(Math.cos(angle)) * boundX;
+          py = cy + t * Math.sin(angle);
+        }
+      }
+      if (Math.abs(Math.sin(angle)) > 0.001) {
+        const t = boundY / Math.abs(Math.sin(angle));
+        if (t * Math.abs(Math.cos(angle)) <= boundX) {
+          px = cx + t * Math.cos(angle);
+          py = cy + Math.sign(Math.sin(angle)) * boundY;
+        }
+      }
+
+      ctx.save();
+      ctx.translate(px, py);
+      ctx.rotate(angle);
+      ctx.fillStyle = color;
+      ctx.beginPath();
+      ctx.moveTo(10, 0);
+      ctx.lineTo(-8, -6);
+      ctx.lineTo(-4, 0);
+      ctx.lineTo(-8, 6);
+      ctx.fill();
+      
+      if (isBoss) {
+        ctx.strokeStyle = "rgba(255,255,255,0.8)";
+        ctx.lineWidth = 1;
+        ctx.stroke();
+      }
+      ctx.restore();
+    };
+
+    if (gameplay.boss && gameplay.boss.active) {
+      drawPointer(gameplay.boss.x, gameplay.boss.y, "#ff6fb0", true);
+    }
+    for (const e of gameplay.enemies.items) {
+      if (e.active && e.elite) {
+        drawPointer(e.x, e.y, "#ffd36f", false);
+      }
+    }
+  };
+
   const nightOverlay = (ctx, viewW, viewH, darkness) => {
     if (darkness <= 0.18) return;
     ctx.fillStyle = `rgba(0,0,0,${darkness})`;
@@ -467,5 +672,5 @@
     }
   };
 
-  root.render = { PixelRenderer, drawWorld, drawBullet, drawPickup, drawSpecial, drawLightning, drawEnemy, drawBoss, drawParticle, drawPlayer, nightOverlay };
+  root.render = { PixelRenderer, drawWorld, drawBullet, drawPickup, drawSpecial, drawLightning, drawEnemy, drawBoss, drawParticle, drawPlayer, drawIndicators, nightOverlay };
 })();

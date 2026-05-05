@@ -429,6 +429,18 @@
       openSettings();
     });
   }
+
+  const bossSpawnBtns = document.querySelectorAll("[data-boss-spawn]");
+  for (const btn of bossSpawnBtns) {
+    btn.addEventListener("click", () => {
+      audio.unlock();
+      audio.ui();
+      const kind = btn.getAttribute("data-boss-spawn") || "core";
+      if (game.state === "menu" || game.state === "dead") game.start();
+      game.spawnBossNow(kind, audio);
+      closeSettings(false);
+    });
+  }
   if (btnSettingsApply) {
     btnSettingsApply.addEventListener("click", () => {
       closeSettings(true);
@@ -509,6 +521,7 @@
         if (game.state === "shop" && lastUiState !== "shop") ui.renderShop(game, audio);
         if (game.state === "playing" || game.state === "paused" || game.state === "shop") ui.renderMinimap(game, viewW, viewH);
         game.render(hiCtx, viewW, viewH, renderer.atlas);
+        if (game.state === "playing") root.render.drawIndicators(hiCtx, game, game.cam, viewW, viewH);
       });
 
       if (elFpsHud && elTxtFps) {

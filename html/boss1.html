@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>Canvas 复刻 SVG 持枪人物</title>
+<style>
+  body {background: #111; display: flex; justify-content: center; padding-top: 30px;}
+  canvas {border: 1px solid #333;}
+</style>
+</head>
+<body>
+<canvas id="gameCanvas" width="800" height="600"></canvas>
+
+<script>
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+
+// 人物配置
+const player = {
+  x: 300,
+  y: 150,
+  speed: 4,
+  scale: 1
+};
+
+// 键盘按键监听
+const key = {};
+window.addEventListener('keydown', e=> key[e.key] = true);
+window.addEventListener('keyup', e=> key[e.key] = false);
+
+// 配色（和你SVG完全一致）
+const COLOR = {
+  skin: '#ffd9c2',
+  skinDark: '#e2b090',
+  hair: '#555a65',
+  hairLight: '#707580',
+  cloth: '#3c404a',
+  clothLight: '#555a65',
+  pants: '#4a4444',
+  pantsDark: '#383232',
+  belt: '#965420',
+  gun: '#222222',
+  gunLight: '#444444',
+  fire: '#ff8822'
+};
+
+// 绘制矩形带简单明暗
+function drawRect(x, y, w, h, fill, stroke="#222"){
+  ctx.fillStyle = fill;
+  ctx.fillRect(x, y, w, h);
+  ctx.strokeStyle = stroke;
+  ctx.lineWidth = 1;
+  ctx.strokeRect(x, y, w, h);
+}
+
+// 核心：复刻SVG人物 1:1 绘制
+function drawPlayer() {
+  let x = player.x;
+  let y = player.y;
+  let s = player.scale;
+
+  // 头发
+  drawRect(x, y, 55*s, 18*s, COLOR.hair);
+  drawRect(x, y+18*s, 12*s, 35*s, COLOR.hair);
+  drawRect(x+43*s, y+18*s, 12*s, 35*s, COLOR.hair);
+
+  // 脸部
+  drawRect(x+12*s, y+18*s, 31*s, 35*s, COLOR.skin);
+
+  // 眼睛白底
+  drawRect(x+16*s, y+26*s, 8*s, 8*s, '#fff');
+  drawRect(x+39*s, y+26*s, 8*s, 8*s, '#fff');
+  // 眼珠
+  drawRect(x+19*s, y+29*s, 3*s, 3*s, '#222');
+  drawRect(x+42*s, y+29*s, 3*s, 3*s, '#222');
+
+  // 脖子
+  drawRect(x+22*s, y+52*s, 11*s, 6*s, COLOR.skin);
+
+  // 身体上衣
+  drawRect(x+12*s, y+58*s, 31*s, 38*s, COLOR.cloth);
+  // 腰带
+  drawRect(x+12*s, y+92*s, 31*s, 6*s, COLOR.belt);
+
+  // 左手
+  drawRect(x+43*s, y+62*s, 12*s, 32*s, COLOR.cloth);
+  drawRect(x+43*s, y+90*s, 12*s, 10*s, COLOR.skin);
+
+  // 右手臂
+  drawRect(x-10*s, y+62*s, 12*s, 32*s, COLOR.cloth);
+  drawRect(x-10*s, y+90*s, 12*s, 10*s, COLOR.skin);
+
+  // 枪械
+  drawRect(x-45*s, y+72*s, 38*s, 10*s, COLOR.gun);
+  drawRect(x-52*s, y+75*s, 8*s, 4*s, COLOR.gunLight);
+  drawRect(x-15*s, y+68*s, 6*s, 18*s, COLOR.gun);
+
+  // 枪口火光
+  drawRect(x-58*s, y+70*s, 8*s, 12*s, COLOR.fire);
+
+  // 裤子 腿
+  drawRect(x+12*s, y+98*s, 14*s, 36*s, COLOR.pants);
+  drawRect(x+29*s, y+98*s, 14*s, 36*s, COLOR.pants);
+
+  // 鞋子
+  drawRect(x+12*s, y+132*s, 14*s, 8*s, '#282222');
+  drawRect(x+29*s, y+132*s, 14*s, 8*s, '#282222');
+}
+
+// 游戏循环
+function gameLoop(){
+  // 清屏
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+
+  // 移动控制
+  if(key['ArrowLeft'] || key['a']) player.x -= player.speed;
+  if(key['ArrowRight'] || key['d']) player.x += player.speed;
+  if(key['ArrowUp'] || key['w']) player.y -= player.speed;
+  if(key['ArrowDown'] || key['s']) player.y += player.speed;
+
+  // 边界限制
+  player.x = Math.max(0, Math.min(canvas.width - 80, player.x));
+  player.y = Math.max(0, Math.min(canvas.height - 160, player.y));
+
+  // 绘制人物
+  drawPlayer();
+
+  requestAnimationFrame(gameLoop);
+}
+
+// 启动
+gameLoop();
+</script>
+</body>
+</html>

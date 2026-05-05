@@ -2,7 +2,7 @@
   const root = (window.Shooter = window.Shooter || {});
   const { clamp, norm, rand, randInt, fmtTime, nowISO } = root.util;
   const { Pool } = root;
-  const { Bullet, Enemy, Pickup, Particle, Player, Boss, SpecialProjectile, LightningFx } = root.entities;
+  const { Bullet, Enemy, Pickup, Particle, Player, Boss, CameraShake, SpecialProjectile, LightningFx } = root.entities;
   const { drawWorld, drawBullet, drawPickup, drawSpecial, drawLightning, drawEnemy, drawBoss, drawParticle, drawPlayer, nightOverlay } =
     root.render;
   const WORLD = root.WORLD;
@@ -105,6 +105,27 @@
       this.state = this.beforeShop === "paused" ? "paused" : "playing";
       this.beforeShop = null;
       this.audio.ui();
+    }
+    spawnBossNow(kind, audio) {
+      if (this.state === "menu" || this.state === "dead") return false;
+      const level = this.bossLevel + Math.floor(this.difficulty);
+      this.boss.active = false;
+      this.boss.init(level, kind);
+      if (audio) audio.bossSpawn();
+      this.spawnBurst(this.boss.x, this.boss.y, {
+        count: 56,
+        speed: 520,
+        spread: 3.14,
+        ttlA: 0.2,
+        ttlB: 0.55,
+        sizeA: 1,
+        sizeB: 5,
+        color: kind === "gunslinger" ? "#ffd36f" : "#7ad0ff",
+        alpha: 0.92,
+        drag: 3.0,
+        gravity: 200,
+      });
+      return true;
     }
     useSpecial(kind, shake) {
       if (this.state !== "playing") return false;
@@ -321,6 +342,86 @@
       this.spawnBurst(x, y, { count: elite ? 26 : 18, speed: elite ? 360 : 300, spread: elite ? 2.8 : 2.4, ttlA: 0.12, ttlB: 0.35, sizeA: 1, sizeB: 4, color: elite ? "#ffd36f" : "#ff5b6e", alpha: 0.95, drag: 3.4, gravity: 220 });
       this.spawnBurst(x, y, { count: 10, speed: 240, spread: 2.2, ttlA: 0.1, ttlB: 0.24, sizeA: 1, sizeB: 3, color: "#c7d2fe", alpha: 0.65, drag: 3.9 });
     }
+    explodeBarrel(x, y) {
+      this.audio.explosion(true);
+      
+      // Need to find the shake object since it's passed into update() not stored on Game
+      // Let's try to get it from the global entities if not available directly
+      if (this.currentShake) {
+        this.currentShake.kick(0.65);
+      }
+
+      this.spawnBurst(x, y, { count: 40, speed: 450, spread: Math.PI, ttlA: 0.2, ttlB: 0.45, sizeA: 2, sizeB: 6, color: "#ff8822", alpha: 1, drag: 4.0 });
+      this.spawnBurst(x, y, { count: 30, speed: 300, spread: Math.PI, ttlA: 0.3, ttlB: 0.6, sizeA: 2, sizeB: 5, color: "#555555", alpha: 0.6, drag: 3.0 });
+      
+      const r = 240;
+      const dmg = 80;
+      
+      // Damage enemies
+      for (const e of this.enemies.items) {
+        if (!e.active) continue;
+        const dx = e.x - x;
+        const dy = e.y - y;
+        const dist = Math.hypot(dx, dy);
+        if (dist < r) {
+          const falloff = 1 - dist / r;
+          e.hp -= dmg * falloff;
+          e.hitFlash = 0.12;
+          if (dist > 10) {
+            e.x += (dx / dist) * 40 * falloff;
+            e.y += (dy / dist) * 40 * falloff;
+          }
+          if (e.hp <= 0 && !e.dead) {
+            e.dead = true;
+            this.killEnemy(e.x, e.y, e.elite);
+            this.progressKillDrops(e.elite);
+            this.kills += 1;
+            this.coins += e.elite ? 4 : 1;
+          }
+        }
+      }
+      
+      // Damage Boss
+      if (this.boss && this.boss.active) {
+        const dx = this.boss.x - x;
+        const dy = this.boss.y - y;
+        const dist = Math.hypot(dx, dy);
+        if (dist < r + this.boss.r) {
+          const falloff = 1 - Math.max(0, dist - this.boss.r) / r;
+          this.boss.hp -= dmg * 0.7 * falloff;
+          this.boss.hitFlash = 0.15;
+          if (this.boss.hp <= 0 && !this.boss.dead) {
+            this.boss.dead = true;
+            this.onBossKilled();
+          }
+        }
+      }
+
+      // Damage player
+      const pdx = this.player.x - x;
+      const pdy = this.player.y - y;
+      const pdist = Math.hypot(pdx, pdy);
+      if (pdist < r && window.Shooter?.config?.invincible !== true) {
+        const falloff = 1 - pdist / r;
+        this.player.takeDamage(dmg * 0.4 * falloff, { x: pdx / pdist, y: pdy / pdist }, this.audio);
+        this.hurtPlayer(this.player.x, this.player.y);
+      }
+      
+      // Chain reaction
+      for (const b of WORLD.barrels) {
+        if (!b.active || (b.x === x && b.y === y)) continue;
+        const bdx = b.x - x;
+        const bdy = b.y - y;
+        if (Math.hypot(bdx, bdy) < r) {
+          setTimeout(() => {
+            if (b.active) {
+              b.active = false;
+              this.explodeBarrel(b.x, b.y);
+            }
+          }, randInt(100, 250));
+        }
+      }
+    }
     hurtPlayer(x, y) {
       this.spawnBurst(x, y, { count: 14, speed: 220, spread: 2.4, ttlA: 0.12, ttlB: 0.28, sizeA: 1, sizeB: 3, color: "#ff7b7b", alpha: 0.75, drag: 3.6, gravity: 180 });
     }
@@ -514,6 +615,7 @@
     }
     update(dt, input, shake, audio, tNow) {
       if (this.state !== "playing") return;
+      this.currentShake = shake;
       this.t += dt;
       this.dayT += dt;
       this.eliteAnnounceCd = Math.max(0, this.eliteAnnounceCd - dt);
@@ -537,7 +639,8 @@
       audio.setAmbient(night ? 0.58 : 0.22);
 
       if (!this.boss.active && this.kills >= this.nextBossAt) {
-        this.boss.init(this.bossLevel + Math.floor(this.difficulty));
+        const kind = Math.random() < 0.55 ? "core" : "gunslinger";
+        this.boss.init(this.bossLevel + Math.floor(this.difficulty), kind);
         audio.bossSpawn();
         this.spawnBurst(this.boss.x, this.boss.y, { count: 46, speed: 420, spread: 3.14, ttlA: 0.2, ttlB: 0.5, sizeA: 1, sizeB: 4, color: "#ffd36f", alpha: 0.9, drag: 3.2, gravity: 200 });
       }
@@ -589,6 +692,23 @@
       for (const p of this.pickups.items) p.update(dt);
       for (const p of this.particles.items) p.update(dt);
       for (const f of this.fx.items) f.update(dt);
+      for (const b of WORLD.barrels) {
+        if (!b.active) continue;
+        for (const bul of this.bullets.items) {
+          if (!bul.active) continue;
+          const dist = Math.hypot(b.x - bul.x, b.y - bul.y);
+          if (dist < 22) { // barrel radius + bullet radius
+            bul.active = false;
+            b.hp -= bul.dmg;
+            if (b.hp <= 0) {
+              b.active = false;
+              this.explodeBarrel(b.x, b.y);
+            } else {
+              this.hitEnemy(bul.x, bul.y);
+            }
+          }
+        }
+      }
 
       if (this.thunder) {
         this.thunder.t += dt;
@@ -755,7 +875,7 @@
       this.cam.y = clamp(cy + off.y, 0, Math.max(0, WORLD.h - viewH));
     }
     render(ctx, viewW, viewH, atlas) {
-      drawWorld(ctx, WORLD, this.cam, viewW, viewH);
+      drawWorld(ctx, WORLD, this.cam, viewW, viewH, atlas);
       for (const p of this.pickups.items) drawPickup(ctx, this.cam, p);
       for (const b of this.bullets.items) drawBullet(ctx, this.cam, b);
       for (const s of this.specials.items) drawSpecial(ctx, this.cam, s);
