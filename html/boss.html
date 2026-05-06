@@ -1,0 +1,1709 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>像素 BOSS 展示</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 30px;
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      color: #fff;
+    }
+    h1 {
+      font-size: 2rem;
+      margin-bottom: 20px;
+      text-shadow: 0 0 30px rgba(255, 150, 50, 0.6);
+      letter-spacing: 3px;
+    }
+    .canvas-container {
+      position: relative;
+      border: 4px solid #444;
+      border-radius: 8px;
+      box-shadow: 0 0 50px rgba(255, 100, 50, 0.3), inset 0 0 100px rgba(0,0,0,0.8);
+      background: #0a0a12;
+    }
+    canvas { display: block; image-rendering: pixelated; cursor: crosshair; }
+    .controls {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      margin-top: 25px;
+      justify-content: center;
+    }
+    .btn {
+      padding: 12px 24px;
+      border: none;
+      border-radius: 6px;
+      font-size: 0.95rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+    }
+    .btn:hover { transform: translateY(-3px); box-shadow: 0 5px 20px rgba(0,0,0,0.3); }
+    .btn:active { transform: translateY(0); }
+    .btn-idle { background: linear-gradient(135deg, #4ecdc4, #44a08d); color: white; }
+    .btn-walk { background: linear-gradient(135deg, #feca57, #f8b739); color: #333; }
+    .btn-attack { background: linear-gradient(135deg, #ff6b6b, #ee5a5a); color: white; }
+    .btn-hurt { background: linear-gradient(135deg, #a55eea, #8854d0); color: white; }
+    .btn-dead { background: linear-gradient(135deg, #576574, #485460); color: white; }
+    .btn-sword { background: linear-gradient(135deg, #ff4757, #ff6348); color: white; box-shadow: 0 0 20px rgba(255,71,87,0.4); }
+    .btn-ball { background: linear-gradient(135deg, #e74c3c, #c0392b); color: white; }
+    .btn-breath { background: linear-gradient(135deg, #ff6348, #ff4757); color: white; }
+    .btn-aoe { background: linear-gradient(135deg, #9b59b6, #8e44ad); color: white; }
+    .info {
+      margin-top: 20px;
+      padding: 15px 25px;
+      background: rgba(255,255,255,0.05);
+      border-radius: 10px;
+      font-size: 0.9rem;
+      color: #aaa;
+      max-width: 600px;
+      text-align: center;
+    }
+    .skill-status {
+      margin-top: 15px;
+      padding: 10px 20px;
+      background: rgba(255,100,50,0.1);
+      border: 1px solid rgba(255,100,50,0.3);
+      border-radius: 8px;
+      font-family: monospace;
+      font-size: 0.85rem;
+      min-width: 500px;
+    }
+    .skill-status span { color: #ff9f43; }
+  </style>
+</head>
+<body>
+  <h1>像素 BOSS 火焰技能</h1>
+  <div class="canvas-container">
+    <canvas id="canvas" width="700" height="500"></canvas>
+  </div>
+  <div class="controls">
+    <button class="btn btn-idle" onclick="setState('idle')">待机</button>
+    <button class="btn btn-walk" onclick="setState('walk')">移动</button>
+    <button class="btn btn-attack" onclick="setState('attack')">攻击</button>
+    <button class="btn btn-hurt" onclick="setState('hurt')">受伤</button>
+    <button class="btn btn-dead" onclick="setState('dead')">死亡</button>
+  </div>
+  <div class="controls">
+    <button class="btn btn-sword" onclick="triggerFlameSword()">火焰刀</button>
+    <button class="btn btn-ball" onclick="triggerFireBall()">火焰球</button>
+    <button class="btn btn-breath" onclick="triggerFlameBreath()">火焰吐息</button>
+    <button class="btn btn-aoe" onclick="triggerGroundSlam()">地面重击</button>
+  </div>
+  <div class="info">
+    点击按钮触发技能 | 点击画布设置目标点 | 空格键：受伤 | 重置按钮：复活 BOSS
+  </div>
+  <div class="skill-status">
+    火焰刀CD: <span id="swordCD">就绪</span> | 
+    火球CD: <span id="ballCD">就绪</span> | 
+    吐息CD: <span id="breathCD">就绪</span> | 
+    重击CD: <span id="aoeCD">就绪</span>
+  </div>
+
+  <script>
+    const canvas = document.getElementById('canvas');
+    const ctx = canvas.getContext('2d');
+
+    // ============ 全局状态 ============
+    let screenShake = { x: 0, y: 0, intensity: 0 };
+    let targetPoint = { x: 150, y: 350 };
+
+    // ============ 粒子颜色池 ============
+    const FIRE_COLORS = ['#ffff00', '#ffcc00', '#ff9900', '#ff6600', '#ff3300', '#cc0000'];
+    const ROCK_COLORS = ['#4a4a4a', '#5d5d5d', '#8B7355', '#a0522d', '#6b5344'];
+
+    // ============ 像素 BOSS ============
+    const boss = {
+      x: 500,
+      y: 300,
+      baseX: 500,
+      baseY: 300,
+      state: 'idle',
+      breathOffset: 0,
+      walkOffset: 0,
+      shadowScale: 1,
+      flashTimer: 0,
+      effects: [],
+      isAlive: true,
+
+      // 技能冷却
+      swordCooldown: 0,
+      ballCooldown: 0,
+      breathCooldown: 0,
+      aoeCooldown: 0,
+      swordCDTime: 3000,
+      ballCDTime: 3000,
+      breathCDTime: 4000,
+      aoeCDTime: 6000,
+
+      // 火焰刀挥舞
+      flameSword: {
+        state: 'IDLE',
+        skillTimer: 0,
+        phase: 0,        // 0=蓄力, 1=挥砍, 2=收招
+        particles: [],
+        slashTrails: [],
+        hitTargets: new Set(),
+        swordAngle: -45,
+        droppedSword: null,
+      },
+
+      // 火焰吐息
+      flameBreath: {
+        state: 'IDLE',
+        skillTimer: 0,
+        particles: [],
+        trails: [],
+        hitTarget: false,
+      },
+
+      // 地面重击
+      groundSlam: {
+        state: 'IDLE',
+        cracks: [],
+        rocks: [],
+        dust: [],
+        shockwaves: [],
+        groundDarken: 0,
+        impactCenter: { x: 0, y: 0 },
+        skillTimer: 0,
+      },
+
+      // 火焰球
+      fireballs: [],
+
+      // 死亡动画
+      death: {
+        state: 'IDLE',
+        timer: 0,
+        phase: 0,        // 0=濒死, 1=解体, 2=收尾
+        particles: [],
+        ashParticles: [],
+        burnMark: null,
+        swordDropped: false,
+      },
+    };
+
+    // ============ 绘制像素块 ============
+    function drawPixelBlock(x, y, w, h, color) {
+      ctx.fillStyle = color;
+      ctx.fillRect(Math.floor(x), Math.floor(y), w, h);
+    }
+
+    // ============ 绘制 BOSS ============
+    function drawPixelBoss(alpha = 1) {
+      if (!boss.isAlive && boss.death.state !== 'IDLE') return;
+
+      const x = boss.x;
+      const y = boss.y;
+      const fs = boss.flameSword;
+      const gs = boss.groundSlam;
+      const fb = boss.flameBreath;
+
+      let bob = boss.state === 'idle' ? Math.sin(boss.breathOffset) * 2 : 0;
+      let shake = 0;
+      let tilt = 0;
+
+      // 受伤抖动
+      if (boss.state === 'hurt') {
+        shake = (Math.random() - 0.5) * 8;
+      }
+
+      // 火焰刀蓄力抖动
+      if (fs.state === 'CHARGE') {
+        bob = Math.sin(Date.now() / 50) * 5;
+        shake = (Math.random() - 0.5) * 4;
+      }
+
+      // 地面重击蓄力
+      if (gs.state === 'CHARGE') {
+        bob = Math.sin(Date.now() / 80) * 4;
+        shake = (Math.random() - 0.5) * 3;
+      }
+
+      // 火焰吐息蓄力
+      if (fb.state === 'PREPARE') {
+        bob = Math.sin(Date.now() / 60) * 3;
+        shake = (Math.random() - 0.5) * 2;
+      }
+
+      // 濒死僵直
+      if (boss.death.state === 'DYING') {
+        tilt = Math.sin(boss.death.timer / 100) * 0.1;
+      }
+
+      const offsetX = x + shake;
+      const offsetY = y + bob;
+
+      ctx.save();
+      ctx.globalAlpha = alpha;
+      ctx.translate(offsetX, offsetY);
+      ctx.rotate(tilt);
+
+      if (boss.flashTimer > 0 && Math.floor(boss.flashTimer / 60) % 2 === 0) {
+        ctx.globalAlpha = alpha * 0.5;
+      }
+
+      // ============ 腿部 ============
+      drawPixelBlock(-20, 20, 14, 30, '#2d3436');
+      drawPixelBlock(-22, 45, 18, 10, '#1e272e');
+      drawPixelBlock(6, 20, 14, 30, '#2d3436');
+      drawPixelBlock(4, 45, 18, 10, '#1e272e');
+
+      // ============ 身体/护甲 ============
+      drawPixelBlock(-24, -30, 48, 55, '#3d3d3d');
+      drawPixelBlock(-22, -28, 44, 8, '#4a4a4a');
+      drawPixelBlock(-22, 10, 44, 12, '#2d2d2d');
+
+      // 罗马数字 II
+      drawPixelBlock(-4, -12, 4, 16, '#7f8c8d');
+      drawPixelBlock(0, -12, 4, 16, '#7f8c8d');
+      drawPixelBlock(-4, -6, 8, 3, '#7f8c8d');
+
+      // 腰带
+      drawPixelBlock(-26, 20, 52, 8, '#8B4513');
+      drawPixelBlock(-4, 18, 8, 12, '#CD853F');
+
+      // ============ 左臂 ============
+      drawPixelBlock(-38, -20, 14, 35, '#f5d0c5');
+      drawPixelBlock(-40, -30, 18, 14, '#ff9f43');
+      drawPixelBlock(-38, -28, 14, 4, '#ffc048');
+
+      // ============ 右臂 ============
+      let rightArmY = -20;
+      let rightArmX = 24;
+
+      // 火焰刀蓄力：手臂上扬举刀过肩
+      if (fs.state === 'CHARGE') {
+        rightArmY = -60;
+        rightArmX = 10;
+      }
+      // 挥砍阶段：手臂前伸斜劈
+      else if (fs.state === 'SLASHING') {
+        const progress = 1 - fs.skillTimer / 300;
+        rightArmY = -60 + progress * 80;
+        rightArmX = 10 + progress * 40;
+      }
+      // 收招阶段
+      else if (fs.state === 'RECOVERING') {
+        rightArmY = 20 + (1 - fs.skillTimer / 300) * (-40);
+        rightArmX = 50 - (1 - fs.skillTimer / 300) * 26;
+      }
+      // 地面重击时抬手
+      if (gs.state === 'CHARGE') {
+        rightArmY = -50;
+      }
+      // 投掷姿态
+      if (boss.state === 'throw') {
+        rightArmY = -10;
+      }
+      // 火焰吐息时手臂前伸
+      if (fb.state === 'CASTING') {
+        rightArmY = -35;
+        rightArmX = 40;
+      }
+
+      drawPixelBlock(rightArmX, rightArmY, 14, 35, '#f5d0c5');
+      drawPixelBlock(rightArmX - 2, rightArmY - 10, 18, 14, '#ff9f43');
+      drawPixelBlock(rightArmX, rightArmY - 8, 14, 4, '#ffc048');
+
+      // ============ 武器（火焰刀）==========
+      // 只有在死亡动画中还没掉落时才绘制
+      if (boss.death.state === 'IDLE' || !boss.death.swordDropped) {
+        let swordX = rightArmX + 12;
+        let swordY = rightArmY - 45;
+        let swordRotation = -30;
+
+        // 火焰刀蓄力：刀上扬聚集火焰
+        if (fs.state === 'CHARGE') {
+          swordY = rightArmY - 70;
+          swordRotation = -90;
+        }
+        // 挥砍：刀斜劈
+        else if (fs.state === 'SLASHING') {
+          const progress = 1 - fs.skillTimer / 300;
+          swordY = rightArmY - 70 + progress * 100;
+          swordX = rightArmX + 12 + progress * 30;
+          swordRotation = -90 + progress * 150;
+        }
+        // 收招
+        else if (fs.state === 'RECOVERING') {
+          swordY = 30 + (1 - fs.skillTimer / 300) * (-95);
+          swordX = rightArmX + 42 - (1 - fs.skillTimer / 300) * 26;
+          swordRotation = 60 + (1 - fs.skillTimer / 300) * (-90);
+        }
+        // 地面重击时高举
+        if (gs.state === 'CHARGE') {
+          swordY = rightArmY - 80;
+          swordRotation = -60;
+        }
+        // 火焰吐息时刀斜举
+        if (fb.state === 'CASTING') {
+          swordY = rightArmY - 30;
+          swordRotation = -20;
+        }
+
+        // 火焰强度
+        const flameIntensity = (fs.state === 'CHARGE' || fs.state === 'SLASHING') ? 
+          1.2 : (0.6 + Math.sin(boss.breathOffset * 2) * 0.3);
+
+        // 刀柄
+        ctx.save();
+        ctx.translate(swordX, swordY);
+        ctx.rotate(swordRotation * Math.PI / 180);
+        drawPixelBlock(0, 45, 10, 16, '#5d4037');
+        drawPixelBlock(1, 42, 8, 6, '#c0392b');
+
+        // 火焰剑身
+        for (let i = 0; i < 7; i++) {
+          const flameOff = Math.sin(boss.breathOffset * 3 + i * 0.8) * (3 + (fs.state === 'SLASHING' ? 2 : 0));
+          const color = i < 2 ? '#ff6b35' : (i < 4 ? '#ff9f43' : (i < 6 ? '#feca57' : '#fff5cc'));
+          const size = 10 + (i % 2) * 4 + (fs.state === 'SLASHING' ? 4 : 0);
+          drawPixelBlock(flameOff - size/2, 38 - i * 7, size, 6, color);
+        }
+
+        // 发光效果
+        ctx.globalAlpha = flameIntensity * 0.4;
+        ctx.fillStyle = '#ff6b35';
+        ctx.beginPath();
+        ctx.ellipse(5, 15, 25 * flameIntensity, 45 * flameIntensity, 0, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.restore();
+      }
+
+      ctx.globalAlpha = alpha;
+
+      // ============ 头部 ============
+      drawPixelBlock(-18, -65, 36, 16, '#4a5568');
+      drawPixelBlock(-14, -72, 28, 10, '#4a5568');
+      drawPixelBlock(-18, -52, 36, 24, '#f5d0c5');
+
+      // 眉毛（愤怒）
+      drawPixelBlock(-15, -46, 12, 4, '#2d3436');
+      drawPixelBlock(3, -46, 12, 4, '#2d3436');
+
+      // 眼睛
+      drawPixelBlock(-13, -38, 8, 6, '#2d3436');
+      drawPixelBlock(5, -38, 8, 6, '#2d3436');
+      drawPixelBlock(-12, -37, 4, 3, '#c0392b');
+      drawPixelBlock(6, -37, 4, 3, '#c0392b');
+
+      // 嘴巴
+      drawPixelBlock(-5, -30, 10, 3, '#d35400');
+
+      // 蓄力时张嘴
+      if ((fs.state === 'CHARGE') || fb.state === 'PREPARE') {
+        ctx.globalAlpha = alpha * 0.8;
+        ctx.fillStyle = '#8B0000';
+        ctx.fillRect(-8, -28, 16, 8);
+      }
+
+      ctx.restore();
+    }
+
+    // ============ 火焰刀挥舞技能 ============
+    function triggerFlameSword() {
+      if (boss.flameSword.state !== 'IDLE') return;
+      if (boss.death.state !== 'IDLE') return;
+
+      boss.flameSword.state = 'CHARGE';
+      boss.flameSword.skillTimer = 500;
+      boss.flameSword.phase = 0;
+      boss.flameSword.particles = [];
+      boss.flameSword.slashTrails = [];
+      boss.flameSword.hitTargets.clear();
+      boss.swordCooldown = boss.swordCDTime;
+      boss.state = 'attack';
+
+      updateCooldownUI();
+    }
+
+    function updateFlameSword(dt) {
+      const fs = boss.flameSword;
+      if (fs.state === 'IDLE') return;
+
+      fs.skillTimer -= dt;
+
+      switch (fs.phase) {
+        case 0: // 蓄力阶段
+          // 生成聚集火焰粒子
+          const swordX = boss.x + 22;
+          const swordY = boss.y - 110;
+          for (let i = 0; i < 3; i++) {
+            const angle = Math.random() * Math.PI * 2;
+            const dist = 30 + Math.random() * 20;
+            fs.particles.push({
+              x: swordX + Math.cos(angle) * dist,
+              y: swordY + Math.sin(angle) * dist,
+              targetX: swordX,
+              targetY: swordY,
+              size: 6 + Math.random() * 4,
+              life: 300,
+              maxLife: 300,
+              colorIndex: 0,
+            });
+          }
+
+          if (fs.skillTimer <= 0) {
+            fs.phase = 1;
+            fs.skillTimer = 300;
+            screenShake.intensity = 8;
+          }
+          break;
+
+        case 1: // 挥砍阶段
+          // 挥砍轨迹粒子
+          const slashProgress = 1 - fs.skillTimer / 300;
+          const slashX = boss.x + 22 + slashProgress * 70;
+          const slashY = boss.y - 110 + slashProgress * 100;
+          
+          // 添加刀光轨迹
+          fs.slashTrails.push({
+            x: slashX, y: slashY,
+            angle: -90 + slashProgress * 150,
+            life: 200,
+            maxLife: 200,
+            size: 15 + slashProgress * 10,
+          });
+
+          // 挥砍飞溅粒子
+          for (let i = 0; i < 4; i++) {
+            const angle = (Math.PI / 4) + Math.random() * (Math.PI / 2);
+            fs.particles.push({
+              x: slashX, y: slashY,
+              vx: Math.cos(angle) * (2 + Math.random() * 3),
+              vy: -Math.sin(angle) * (2 + Math.random() * 3),
+              size: 8 + Math.random() * 6,
+              life: 400,
+              maxLife: 400,
+              colorIndex: Math.floor(Math.random() * 4),
+            });
+          }
+
+          // 命中检测（关键帧）
+          if (fs.skillTimer > 150 && fs.skillTimer < 200) {
+            const distToTarget = Math.hypot(targetPoint.x - slashX, targetPoint.y - slashY);
+            if (distToTarget < 120) {
+              if (!fs.hitTargets.has('target')) {
+                fs.hitTargets.add('target');
+                createHitEffect(targetPoint.x, targetPoint.y, 'burn');
+                createHitEffect(targetPoint.x, targetPoint.y, 'slash');
+                screenShake.intensity = 15;
+              }
+            }
+          }
+
+          if (fs.skillTimer <= 0) {
+            fs.phase = 2;
+            fs.skillTimer = 300;
+          }
+          break;
+
+        case 2: // 收招阶段
+          if (fs.skillTimer <= 0) {
+            fs.state = 'IDLE';
+            fs.particles = [];
+            fs.slashTrails = [];
+            boss.state = 'idle';
+            boss.swordCooldown = boss.swordCDTime;
+            updateCooldownUI();
+          }
+          break;
+      }
+
+      // 更新粒子
+      for (let i = fs.particles.length - 1; i >= 0; i--) {
+        const p = fs.particles[i];
+        
+        if (p.targetX !== undefined) {
+          // 聚集粒子
+          p.x += (p.targetX - p.x) * 0.1;
+          p.y += (p.targetY - p.y) * 0.1;
+        } else {
+          // 飞溅粒子
+          p.x += p.vx;
+          p.y += p.vy;
+          p.vy += 0.1;
+        }
+        
+        p.life -= dt;
+        p.size *= 0.97;
+        if (p.life <= 0) fs.particles.splice(i, 1);
+      }
+
+      // 更新刀光轨迹
+      for (let i = fs.slashTrails.length - 1; i >= 0; i--) {
+        fs.slashTrails[i].life -= dt;
+        fs.slashTrails[i].size *= 0.95;
+        if (fs.slashTrails[i].life <= 0) fs.slashTrails.splice(i, 1);
+      }
+    }
+
+    function renderFlameSword() {
+      const fs = boss.flameSword;
+      if (fs.state === 'IDLE') return;
+
+      ctx.save();
+
+      // 刀光轨迹
+      ctx.globalCompositeOperation = 'lighter';
+      fs.slashTrails.forEach(trail => {
+        const alpha = trail.life / trail.maxLife;
+        ctx.globalAlpha = alpha * 0.6;
+        
+        // 绘制弧形刀光
+        ctx.save();
+        ctx.translate(trail.x, trail.y);
+        ctx.rotate(trail.angle * Math.PI / 180);
+        
+        ctx.fillStyle = '#ff9900';
+        ctx.fillRect(-trail.size * 2, -4, trail.size * 4, 8);
+        ctx.fillStyle = '#ffcc00';
+        ctx.fillRect(-trail.size * 1.5, -2, trail.size * 3, 4);
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(-trail.size, -1, trail.size * 2, 2);
+        
+        ctx.restore();
+      });
+
+      // 火焰粒子
+      fs.particles.forEach(p => {
+        const alpha = p.life / p.maxLife;
+        ctx.globalAlpha = alpha;
+        ctx.fillStyle = FIRE_COLORS[p.colorIndex];
+        ctx.fillRect(p.x - p.size/2, p.y - p.size/2, p.size, p.size);
+      });
+
+      ctx.restore();
+    }
+
+    // ============ 火焰球技能 ============
+    function triggerFireBall() {
+      if (boss.ballCooldown > 0) return;
+      if (boss.death.state !== 'IDLE') return;
+
+      boss.ballCooldown = boss.ballCDTime;
+      boss.state = 'throw';
+
+      const startX = boss.x + 30;
+      const startY = boss.y - 30;
+      const dx = targetPoint.x - startX;
+      const dy = targetPoint.y - startY;
+      const dist = Math.hypot(dx, dy);
+      const speed = 6;
+
+      boss.fireballs.push({
+        x: startX,
+        y: startY,
+        vx: (dx / dist) * speed,
+        vy: (dy / dist) * speed,
+        radius: 20,
+        life: 3000,
+        trail: [],
+        exploded: false,
+        explosionParticles: [],
+        explosionLife: 0,
+        maxExplosionRadius: 100,
+      });
+
+      screenShake.intensity = 5;
+      updateCooldownUI();
+
+      setTimeout(() => { boss.state = 'idle'; }, 300);
+    }
+
+    function updateFireBalls(dt) {
+      for (let i = boss.fireballs.length - 1; i >= 0; i--) {
+        const ball = boss.fireballs[i];
+
+        if (ball.exploded) {
+          ball.explosionLife -= dt;
+
+          // 更新爆炸粒子
+          ball.explosionParticles.forEach(p => {
+            p.x += p.vx;
+            p.y += p.vy;
+            p.vy += 0.1;
+            p.life -= dt;
+            p.size *= 0.97;
+          });
+          ball.explosionParticles = ball.explosionParticles.filter(p => p.life > 0);
+
+          if (ball.explosionLife <= 0) {
+            boss.fireballs.splice(i, 1);
+          }
+          continue;
+        }
+
+        ball.x += ball.vx;
+        ball.y += ball.vy;
+
+        if (Math.random() < 0.5) {
+          ball.trail.push({
+            x: ball.x + (Math.random() - 0.5) * 10,
+            y: ball.y + (Math.random() - 0.5) * 10,
+            size: 8 + Math.random() * 6,
+            life: 200,
+            maxLife: 200,
+          });
+        }
+
+        for (let j = ball.trail.length - 1; j >= 0; j--) {
+          ball.trail[j].life -= dt;
+          if (ball.trail[j].life <= 0) ball.trail.splice(j, 1);
+        }
+
+        ball.life -= dt;
+
+        const distToTarget = Math.hypot(targetPoint.x - ball.x, targetPoint.y - ball.y);
+        if (distToTarget < 40) {
+          explodeFireBall(ball);
+          continue;
+        }
+
+        if (ball.x < -50 || ball.x > 750 || ball.y < -50 || ball.y > 550 || ball.life <= 0) {
+          explodeFireBall(ball);
+        }
+      }
+    }
+
+    function explodeFireBall(ball) {
+      ball.exploded = true;
+      ball.explosionLife = 500;
+      screenShake.intensity = 12;
+
+      const distToTarget = Math.hypot(targetPoint.x - ball.x, targetPoint.y - ball.y);
+      if (distToTarget < 100) {
+        createHitEffect(targetPoint.x, targetPoint.y, 'explosion');
+      }
+
+      for (let i = 0; i < 30; i++) {
+        const angle = Math.random() * Math.PI * 2;
+        const speed = 2 + Math.random() * 4;
+        ball.explosionParticles.push({
+          x: ball.x, y: ball.y,
+          vx: Math.cos(angle) * speed,
+          vy: Math.sin(angle) * speed - 2,
+          size: 6 + Math.random() * 10,
+          life: 400 + Math.random() * 200,
+          maxLife: 600,
+          colorIndex: Math.floor(Math.random() * 4),
+        });
+      }
+    }
+
+    function renderFireBalls() {
+      ctx.save();
+      ctx.globalCompositeOperation = 'lighter';
+
+      boss.fireballs.forEach(ball => {
+        if (ball.exploded) {
+          const progress = 1 - ball.explosionLife / 500;
+
+          ctx.globalAlpha = (1 - progress) * 0.5;
+          ctx.fillStyle = '#ff6600';
+          ctx.beginPath();
+          ctx.arc(ball.x, ball.y, ball.maxExplosionRadius * progress, 0, Math.PI * 2);
+          ctx.fill();
+
+          ball.explosionParticles.forEach(p => {
+            const alpha = p.life / p.maxLife;
+            ctx.globalAlpha = alpha * 0.8;
+            ctx.fillStyle = FIRE_COLORS[p.colorIndex];
+            ctx.fillRect(p.x - p.size/2, p.y - p.size/2, p.size, p.size);
+          });
+        } else {
+          ball.trail.forEach(t => {
+            const alpha = t.life / t.maxLife;
+            ctx.globalAlpha = alpha * 0.4;
+            ctx.fillStyle = '#ff6600';
+            ctx.fillRect(t.x - t.size/2, t.y - t.size/2, t.size, t.size);
+          });
+
+          ctx.globalAlpha = 0.3;
+          ctx.fillStyle = '#ff9900';
+          ctx.beginPath();
+          ctx.arc(ball.x, ball.y, ball.radius * 1.8, 0, Math.PI * 2);
+          ctx.fill();
+
+          ctx.globalAlpha = 0.6;
+          ctx.fillStyle = '#ff6600';
+          ctx.beginPath();
+          ctx.arc(ball.x, ball.y, ball.radius * 1.2, 0, Math.PI * 2);
+          ctx.fill();
+
+          ctx.globalAlpha = 0.9;
+          ctx.fillStyle = '#ffcc00';
+          ctx.beginPath();
+          ctx.arc(ball.x, ball.y, ball.radius * 0.6, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      });
+
+      ctx.restore();
+    }
+
+    // ============ 火焰吐息技能 ============
+    function triggerFlameBreath() {
+      if (boss.flameBreath.state !== 'IDLE') return;
+      if (boss.death.state !== 'IDLE') return;
+
+      boss.flameBreath.state = 'PREPARE';
+      boss.flameBreath.skillTimer = 600;
+      boss.flameBreath.particles = [];
+      boss.flameBreath.trails = [];
+      boss.flameBreath.hitTarget = false;
+      boss.state = 'attack';
+      boss.breathCooldown = boss.breathCDTime;
+      updateCooldownUI();
+    }
+
+    function updateFlameBreath(dt) {
+      const fb = boss.flameBreath;
+
+      switch (fb.state) {
+        case 'PREPARE':
+          fb.skillTimer -= dt;
+
+          if (fb.skillTimer <= 0) {
+            fb.state = 'CASTING';
+            fb.skillTimer = 2500;
+            screenShake.intensity = 8;
+            updateCooldownUI();
+          }
+          break;
+
+        case 'CASTING':
+          fb.skillTimer -= dt;
+
+          const emitX = boss.x - 50;
+          const emitY = boss.y - 30;
+          const baseAngle = Math.PI;
+          const spreadAngle = 0.3;
+
+          for (let i = 0; i < 6; i++) {
+            const angle = baseAngle + (Math.random() - 0.5) * spreadAngle;
+            const power = 1.2 + Math.random() * 0.5;
+            fb.particles.push(createBreathParticle(emitX, emitY, angle, power));
+          }
+
+          if (Math.random() < 0.3) {
+            const big = createBreathParticle(emitX, emitY, baseAngle, 1.5);
+            big.size *= 1.5;
+            fb.particles.push(big);
+          }
+
+          const distToTarget = Math.hypot(targetPoint.x - emitX, targetPoint.y - emitY);
+          if (distToTarget < 200 && fb.skillTimer < 2000) {
+            if (!fb.hitTarget) {
+              fb.hitTarget = true;
+              createHitEffect(targetPoint.x, targetPoint.y, 'burn');
+            }
+          }
+
+          if (screenShake.intensity > 0) {
+            screenShake.intensity *= 0.95;
+          }
+
+          if (fb.skillTimer <= 0) {
+            fb.state = 'COOLDOWN';
+            fb.skillTimer = 4000;
+            fb.hitTarget = false;
+            boss.state = 'idle';
+            updateCooldownUI();
+          }
+          break;
+
+        case 'COOLDOWN':
+          fb.skillTimer -= dt;
+          if (fb.skillTimer <= 0) {
+            fb.state = 'IDLE';
+            fb.particles = [];
+            fb.trails = [];
+            updateCooldownUI();
+          }
+          break;
+      }
+
+      const delta = dt / 16.67;
+      for (let i = fb.particles.length - 1; i >= 0; i--) {
+        const p = fb.particles[i];
+
+        p.x += p.vx * delta;
+        p.y += p.vy * delta;
+        p.vx *= 0.98;
+        p.vy *= 0.98;
+        p.vy -= 0.02 * delta;
+
+        p.life -= 0.02 * delta;
+        p.alpha = Math.max(0, p.life);
+        p.flicker += 0.3 * delta;
+        p.size = (12 + Math.random() * 8) * p.life;
+
+        if (p.life < 0.7) p.colorIndex = 2;
+        if (p.life < 0.4) p.colorIndex = 4;
+        if (p.life < 0.2) p.colorIndex = 5;
+
+        if (Math.random() < 0.3) {
+          fb.trails.push({
+            x: p.x, y: p.y,
+            size: p.size * 0.6,
+            alpha: p.alpha * 0.3,
+            colorIndex: Math.min(p.colorIndex + 1, 5),
+            life: 200, maxLife: 200,
+          });
+        }
+
+        if (p.life <= 0) fb.particles.splice(i, 1);
+      }
+
+      for (let i = fb.trails.length - 1; i >= 0; i--) {
+        fb.trails[i].life -= dt;
+        fb.trails[i].alpha = (fb.trails[i].life / fb.trails[i].maxLife) * 0.3;
+        if (fb.trails[i].life <= 0) fb.trails.splice(i, 1);
+      }
+
+      if (fb.particles.length > 200) {
+        fb.particles.splice(0, fb.particles.length - 200);
+      }
+    }
+
+    function createBreathParticle(x, y, angle, power) {
+      const spread = (Math.random() - 0.5) * 0.5;
+      const finalAngle = angle + spread;
+      const speed = (3 + Math.random() * 3) * power;
+
+      return {
+        x, y,
+        vx: Math.cos(finalAngle) * speed,
+        vy: Math.sin(finalAngle) * speed,
+        life: 1,
+        maxLife: 1,
+        size: 12 + Math.random() * 8,
+        colorIndex: 0,
+        alpha: 1,
+        flicker: Math.random() * Math.PI * 2,
+      };
+    }
+
+    function renderFlameBreath() {
+      const fb = boss.flameBreath;
+      if (fb.state === 'IDLE') return;
+
+      ctx.save();
+
+      fb.trails.forEach(t => {
+        ctx.globalAlpha = t.alpha;
+        ctx.fillStyle = FIRE_COLORS[Math.min(t.colorIndex, 5)];
+        ctx.fillRect(Math.floor(t.x - t.size/2), Math.floor(t.y - t.size/2), Math.floor(t.size), Math.floor(t.size));
+      });
+
+      ctx.globalCompositeOperation = 'lighter';
+
+      fb.particles.forEach(p => {
+        ctx.globalAlpha = p.alpha * 0.3;
+        ctx.fillStyle = FIRE_COLORS[p.colorIndex];
+        ctx.fillRect(Math.floor(p.x - p.size * 1.2), Math.floor(p.y - p.size * 1.2), Math.floor(p.size * 2.4), Math.floor(p.size * 2.4));
+
+        ctx.globalAlpha = p.alpha * (0.8 + Math.sin(p.flicker) * 0.2);
+        ctx.fillStyle = FIRE_COLORS[p.colorIndex];
+        ctx.fillRect(Math.floor(p.x - p.size/2), Math.floor(p.y - p.size/2), Math.floor(p.size), Math.floor(p.size));
+
+        if (p.colorIndex < 3) {
+          ctx.globalAlpha = p.alpha * 0.5;
+          ctx.fillStyle = '#ffffff';
+          ctx.fillRect(Math.floor(p.x - p.size/4), Math.floor(p.y - p.size/4), Math.floor(p.size/2), Math.floor(p.size/2));
+        }
+      });
+
+      ctx.restore();
+    }
+
+    // ============ 命中效果 ============
+    function createHitEffect(x, y, type) {
+      if (type === 'burn') {
+        for (let i = 0; i < 15; i++) {
+          const angle = Math.random() * Math.PI * 2;
+          const dist = Math.random() * 30;
+          boss.effects.push({
+            type: 'burn',
+            x: x + Math.cos(angle) * dist,
+            y: y + Math.sin(angle) * dist,
+            life: 600,
+            maxLife: 600,
+            progress: 0,
+          });
+        }
+      } else if (type === 'explosion') {
+        for (let i = 0; i < 20; i++) {
+          const angle = Math.random() * Math.PI * 2;
+          const dist = Math.random() * 50;
+          boss.effects.push({
+            type: 'explosion',
+            x: x + Math.cos(angle) * dist,
+            y: y + Math.sin(angle) * dist,
+            life: 500,
+            maxLife: 500,
+            progress: 0,
+            size: 8 + Math.random() * 8,
+          });
+        }
+      } else if (type === 'slash') {
+        // 刀光命中特效
+        for (let i = 0; i < 8; i++) {
+          const angle = Math.random() * Math.PI * 2;
+          const dist = Math.random() * 40;
+          boss.effects.push({
+            type: 'slash',
+            x: x + Math.cos(angle) * dist,
+            y: y + Math.sin(angle) * dist,
+            vx: Math.cos(angle) * 3,
+            vy: Math.sin(angle) * 3 - 1,
+            life: 400,
+            maxLife: 400,
+            progress: 0,
+            size: 6 + Math.random() * 6,
+            colorIndex: Math.floor(Math.random() * 3),
+          });
+        }
+      }
+    }
+
+    // ============ 地面重击技能 ============
+    function triggerGroundSlam() {
+      if (boss.aoeCooldown > 0 || boss.groundSlam.state !== 'IDLE') return;
+      if (boss.death.state !== 'IDLE') return;
+
+      boss.groundSlam.state = 'CHARGE';
+      boss.groundSlam.impactCenter = { x: boss.x, y: boss.y + 30 };
+      boss.groundSlam.skillTimer = 1000;
+      boss.state = 'attack';
+      boss.aoeCooldown = boss.aoeCDTime;
+      screenShake.intensity = 3;
+      updateCooldownUI();
+    }
+
+    function updateGroundSlam(dt) {
+      const gs = boss.groundSlam;
+
+      switch (gs.state) {
+        case 'CHARGE':
+          gs.skillTimer -= dt;
+          screenShake.intensity = 2 + Math.sin(Date.now() / 50) * 1;
+
+          if (gs.skillTimer <= 0) {
+            gs.state = 'IMPACT';
+            gs.skillTimer = 100;
+            gs.groundDarken = 1;
+            screenShake.intensity = 15;
+
+            gs.shockwaves.push({
+              x: gs.impactCenter.x, y: gs.impactCenter.y,
+              radius: 20, maxRadius: 200, life: 600, maxLife: 600, lineWidth: 8,
+            });
+
+            generateCracks(gs);
+            generateRocks(gs);
+            generateDust(gs);
+
+            const distToTarget = Math.hypot(targetPoint.x - gs.impactCenter.x, targetPoint.y - gs.impactCenter.y);
+            if (distToTarget < 150) {
+              createHitEffect(targetPoint.x, targetPoint.y, 'explosion');
+            }
+          }
+          break;
+
+        case 'IMPACT':
+          gs.skillTimer -= dt;
+          gs.groundDarken = Math.max(0, gs.groundDarken - dt / 200);
+          screenShake.intensity *= 0.9;
+
+          if (gs.skillTimer <= 0) {
+            gs.state = 'AFTERSHOCK';
+            gs.skillTimer = 800;
+          }
+          break;
+
+        case 'AFTERSHOCK':
+          gs.skillTimer -= dt;
+          screenShake.intensity *= 0.95;
+
+          if (gs.skillTimer <= 0) {
+            gs.state = 'COOLDOWN';
+            gs.skillTimer = 6000;
+          }
+          break;
+
+        case 'COOLDOWN':
+          gs.skillTimer -= dt;
+          if (gs.skillTimer <= 0) {
+            gs.state = 'IDLE';
+            clearGroundSlamEffects(gs);
+          }
+          break;
+      }
+
+      gs.cracks.forEach(c => {
+        c.progress = Math.min(1, c.progress + dt / 800);
+        c.alpha = 1 - c.progress * 0.7;
+      });
+
+      for (let i = gs.rocks.length - 1; i >= 0; i--) {
+        const r = gs.rocks[i];
+        r.x += r.vx; r.y += r.vy;
+        r.vy += 0.3;
+        r.rotation += r.rotationSpeed;
+        r.life -= dt; r.alpha = r.life / r.maxLife;
+        if (r.life <= 0 || r.y > 550) gs.rocks.splice(i, 1);
+      }
+
+      for (let i = gs.dust.length - 1; i >= 0; i--) {
+        const d = gs.dust[i];
+        d.x += d.vx; d.y += d.vy;
+        d.vx *= 0.98; d.vy -= 0.02;
+        d.life -= dt; d.alpha = (d.life / d.maxLife) * 0.6;
+        d.size *= 0.995;
+        if (d.life <= 0) gs.dust.splice(i, 1);
+      }
+
+      for (let i = gs.shockwaves.length - 1; i >= 0; i--) {
+        const sw = gs.shockwaves[i];
+        sw.life -= dt;
+        sw.progress = 1 - sw.life / sw.maxLife;
+        sw.radius = 20 + (sw.maxRadius - 20) * sw.progress;
+        sw.lineWidth = 8 * (1 - sw.progress * 0.7);
+        if (sw.life <= 0) gs.shockwaves.splice(i, 1);
+      }
+
+      if (gs.rocks.length > 50) gs.rocks.splice(0, gs.rocks.length - 50);
+      if (gs.dust.length > 100) gs.dust.splice(0, gs.dust.length - 100);
+    }
+
+    function generateCracks(gs) {
+      const numCracks = 6 + Math.floor(Math.random() * 3);
+      for (let i = 0; i < numCracks; i++) {
+        gs.cracks.push({
+          x: gs.impactCenter.x, y: gs.impactCenter.y,
+          angle: (i / numCracks) * Math.PI * 2 + (Math.random() - 0.5) * 0.5,
+          length: 60 + Math.random() * 80,
+          width: 3 + Math.random() * 3,
+          progress: 0, alpha: 1, jitter: Math.random() * 3,
+        });
+      }
+    }
+
+    function generateRocks(gs) {
+      for (let i = 0; i < 25; i++) {
+        const angle = Math.random() * Math.PI * 2;
+        const speed = 3 + Math.random() * 5;
+        gs.rocks.push({
+          x: gs.impactCenter.x + (Math.random() - 0.5) * 60,
+          y: gs.impactCenter.y + (Math.random() - 0.5) * 30,
+          vx: Math.cos(angle) * speed,
+          vy: -Math.abs(Math.sin(angle)) * speed - 2,
+          size: 4 + Math.random() * 8,
+          color: ROCK_COLORS[Math.floor(Math.random() * ROCK_COLORS.length)],
+          rotation: Math.random() * Math.PI * 2,
+          rotationSpeed: (Math.random() - 0.5) * 0.3,
+          life: 800 + Math.random() * 400,
+          maxLife: 1200, alpha: 1,
+        });
+      }
+    }
+
+    function generateDust(gs) {
+      for (let i = 0; i < 40; i++) {
+        const angle = Math.random() * Math.PI * 2;
+        const speed = 1 + Math.random() * 2;
+        gs.dust.push({
+          x: gs.impactCenter.x + (Math.random() - 0.5) * 100,
+          y: gs.impactCenter.y + (Math.random() - 0.5) * 50,
+          vx: Math.cos(angle) * speed,
+          vy: -0.5 - Math.random() * 0.5,
+          size: 8 + Math.random() * 12,
+          color: Math.random() > 0.5 ? '#8B7355' : '#a09070',
+          life: 600 + Math.random() * 400,
+          maxLife: 1000, alpha: 0.6,
+        });
+      }
+    }
+
+    function clearGroundSlamEffects(gs) {
+      gs.cracks = []; gs.rocks = []; gs.dust = []; gs.shockwaves = [];
+      gs.groundDarken = 0;
+    }
+
+    function renderGroundSlamEffects() {
+      const gs = boss.groundSlam;
+      ctx.save();
+
+      if (gs.groundDarken > 0) {
+        ctx.fillStyle = `rgba(20, 10, 5, ${gs.groundDarken * 0.4})`;
+        ctx.beginPath();
+        ctx.ellipse(gs.impactCenter.x, gs.impactCenter.y, 150, 40, 0, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      gs.shockwaves.forEach(sw => {
+        ctx.strokeStyle = `rgba(255, 150, 50, ${sw.life / sw.maxLife})`;
+        ctx.lineWidth = sw.lineWidth;
+        ctx.beginPath();
+        ctx.ellipse(sw.x, sw.y, sw.radius, sw.radius * 0.4, 0, 0, Math.PI * 2);
+        ctx.stroke();
+
+        ctx.strokeStyle = `rgba(255, 200, 100, ${sw.life / sw.maxLife * 0.5})`;
+        ctx.lineWidth = sw.lineWidth * 0.5;
+        ctx.beginPath();
+        ctx.ellipse(sw.x, sw.y, sw.radius * 0.7, sw.radius * 0.28, 0, 0, Math.PI * 2);
+        ctx.stroke();
+      });
+
+      gs.cracks.forEach(c => {
+        ctx.strokeStyle = `rgba(30, 20, 10, ${c.alpha})`;
+        ctx.lineWidth = c.width * (1 - c.progress * 0.5);
+        ctx.lineCap = 'round';
+        ctx.beginPath();
+        const len = c.length * c.progress;
+        ctx.moveTo(c.x, c.y);
+        for (let i = 1; i <= 5; i++) {
+          const t = i / 5;
+          const jitter = Math.sin(t * 10 + Date.now() / 100) * c.jitter * (1 - t);
+          ctx.lineTo(
+            c.x + Math.cos(c.angle) * len * t + Math.cos(c.angle + Math.PI/2) * jitter,
+            c.y + Math.sin(c.angle) * len * t + Math.sin(c.angle + Math.PI/2) * jitter
+          );
+        }
+        ctx.stroke();
+      });
+
+      ctx.globalCompositeOperation = 'lighter';
+      gs.dust.forEach(d => {
+        ctx.globalAlpha = d.alpha;
+        ctx.fillStyle = d.color;
+        ctx.fillRect(Math.floor(d.x - d.size/2), Math.floor(d.y - d.size/2), Math.floor(d.size), Math.floor(d.size));
+      });
+      ctx.globalCompositeOperation = 'source-over';
+
+      gs.rocks.forEach(r => {
+        ctx.save();
+        ctx.translate(r.x, r.y);
+        ctx.rotate(r.rotation);
+        ctx.globalAlpha = r.alpha;
+        ctx.fillStyle = r.color;
+        ctx.fillRect(-r.size/2, -r.size/2, r.size, r.size);
+        ctx.fillStyle = 'rgba(0,0,0,0.3)';
+        ctx.fillRect(-r.size/2 + 2, -r.size/2 + 2, r.size, r.size);
+        ctx.restore();
+      });
+
+      ctx.restore();
+    }
+
+    // ============ 死亡动画系统 ============
+    function updateDeathAnimation(dt) {
+      const death = boss.death;
+      if (death.state === 'IDLE') return;
+
+      death.timer += dt;
+
+      switch (death.phase) {
+        case 0: // 阶段1：濒死僵直 (0-500ms)
+          // 屏幕震动 + 闪白
+          if (death.timer < 200) {
+            screenShake.intensity = 4;
+            boss.flashTimer = 100;
+          }
+
+          // 刀掉落
+          if (death.timer > 300 && !death.swordDropped) {
+            death.swordDropped = true;
+            death.droppedSword = {
+              x: boss.x + 30,
+              y: boss.y,
+              rotation: 45,
+              vy: 2,
+              life: 1500,
+              maxLife: 1500,
+              particles: [],
+            };
+          }
+
+          if (death.timer >= 500) {
+            death.phase = 1;
+            death.timer = 0;
+          }
+          break;
+
+        case 1: // 阶段2：火焰消散/解体 (500-2000ms)
+          const progress = death.timer / 1500;
+
+          // 生成火焰解体粒子
+          if (death.timer < 1000 && Math.random() < 0.5) {
+            death.particles.push({
+              x: boss.x + (Math.random() - 0.5) * 60,
+              y: boss.y + (Math.random() - 0.5) * 100,
+              vx: (Math.random() - 0.5) * 4,
+              vy: -1 - Math.random() * 3,
+              size: 8 + Math.random() * 12,
+              life: 800,
+              maxLife: 800,
+              colorIndex: Math.floor(Math.random() * 4),
+            });
+          }
+
+          // 更新解体粒子
+          for (let i = death.particles.length - 1; i >= 0; i--) {
+            const p = death.particles[i];
+            p.x += p.vx;
+            p.y += p.vy;
+            p.vy -= 0.02;
+            p.size *= 0.995;
+            p.life -= dt;
+            if (p.life <= 0) death.particles.splice(i, 1);
+          }
+
+          // 最后的爆炸
+          if (death.timer > 1400 && death.particles.length < 50) {
+            for (let i = 0; i < 30; i++) {
+              const angle = Math.random() * Math.PI * 2;
+              const speed = 2 + Math.random() * 5;
+              death.particles.push({
+                x: boss.x,
+                y: boss.y,
+                vx: Math.cos(angle) * speed,
+                vy: Math.sin(angle) * speed - 2,
+                size: 10 + Math.random() * 15,
+                life: 600,
+                maxLife: 600,
+                colorIndex: Math.floor(Math.random() * 4),
+              });
+            }
+            screenShake.intensity = 20;
+          }
+
+          if (death.timer >= 1500) {
+            death.phase = 2;
+            death.timer = 0;
+          }
+          break;
+
+        case 2: // 阶段3：收尾 (2000-2500ms)
+          // 留下燃烧焦痕
+          if (!death.burnMark) {
+            death.burnMark = {
+              x: boss.x,
+              y: boss.y + 30,
+              life: 5000,
+              maxLife: 5000,
+            };
+          }
+
+          // 更新灰烬粒子
+          for (let i = death.ashParticles.length - 1; i >= 0; i--) {
+            const p = death.ashParticles[i];
+            p.x += p.vx;
+            p.y += p.vy;
+            p.vy -= 0.01;
+            p.life -= dt;
+            if (p.life <= 0) death.ashParticles.splice(i, 1);
+          }
+
+          // 生成上浮灰烬
+          if (death.burnMark && Math.random() < 0.3) {
+            death.ashParticles.push({
+              x: death.burnMark.x + (Math.random() - 0.5) * 60,
+              y: death.burnMark.y,
+              vx: (Math.random() - 0.5) * 0.5,
+              vy: -0.5 - Math.random() * 0.5,
+              size: 3 + Math.random() * 4,
+              life: 2000,
+              maxLife: 2000,
+            });
+          }
+
+          // 更新焦痕
+          if (death.burnMark) {
+            death.burnMark.life -= dt;
+            if (death.burnMark.life <= 0) {
+              death.burnMark = null;
+            }
+          }
+
+          if (death.timer >= 500) {
+            boss.isAlive = false;
+          }
+          break;
+      }
+    }
+
+    function renderDeathAnimation() {
+      const death = boss.death;
+      if (death.state === 'IDLE') return;
+
+      ctx.save();
+
+      // 焦痕
+      if (death.burnMark) {
+        const alpha = (death.burnMark.life / death.burnMark.maxLife) * 0.6;
+        ctx.globalAlpha = alpha;
+        ctx.fillStyle = '#1a1a1a';
+        ctx.beginPath();
+        ctx.ellipse(death.burnMark.x, death.burnMark.y, 50, 15, 0, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.fillStyle = '#2d2d2d';
+        ctx.beginPath();
+        ctx.ellipse(death.burnMark.x, death.burnMark.y, 35, 10, 0, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      // 灰烬粒子
+      ctx.globalAlpha = 1;
+      death.ashParticles.forEach(p => {
+        const alpha = (p.life / p.maxLife) * 0.5;
+        ctx.globalAlpha = alpha;
+        ctx.fillStyle = '#555';
+        ctx.fillRect(p.x - p.size/2, p.y - p.size/2, p.size, p.size);
+      });
+
+      // 解体粒子
+      ctx.globalCompositeOperation = 'lighter';
+      death.particles.forEach(p => {
+        const alpha = (p.life / p.maxLife) * 0.8;
+        ctx.globalAlpha = alpha;
+        ctx.fillStyle = FIRE_COLORS[p.colorIndex];
+        ctx.fillRect(p.x - p.size/2, p.y - p.size/2, p.size, p.size);
+      });
+
+      // 掉落武器
+      if (death.droppedSword) {
+        const sword = death.droppedSword;
+        sword.y += sword.vy;
+        sword.vy *= 0.95;
+        sword.rotation += 5;
+
+        ctx.globalAlpha = sword.life / sword.maxLife;
+        ctx.globalCompositeOperation = 'lighter';
+
+        // 刀发光
+        ctx.fillStyle = '#ff6b35';
+        ctx.beginPath();
+        ctx.ellipse(sword.x, sword.y, 20, 30, sword.rotation * Math.PI / 180, 0, 0, Math.PI * 2);
+        ctx.fill();
+
+        // 刀身
+        ctx.globalCompositeOperation = 'source-over';
+        ctx.save();
+        ctx.translate(sword.x, sword.y);
+        ctx.rotate(sword.rotation * Math.PI / 180);
+        ctx.globalAlpha = sword.life / sword.maxLife;
+        drawPixelBlock(0, -20, 8, 30, '#5d4037');
+        for (let i = 0; i < 5; i++) {
+          const color = i < 2 ? '#ff6b35' : '#ff9f43';
+          drawPixelBlock(-3, -50 + i * 6, 6 + (i%2)*2, 5, color);
+        }
+        ctx.restore();
+
+        sword.life -= 16;
+      }
+
+      ctx.restore();
+    }
+
+    // ============ 效果渲染 ============
+    function renderEffects() {
+      ctx.save();
+
+      boss.effects.forEach(e => {
+        e.progress = 1 - e.life / e.maxLife;
+
+        if (e.type === 'burn') {
+          ctx.globalCompositeOperation = 'lighter';
+          ctx.globalAlpha = (1 - e.progress) * 0.8;
+          ctx.fillStyle = '#ff6600';
+          ctx.fillRect(e.x - 6, e.y - 6, 12, 12);
+          ctx.fillStyle = '#ffcc00';
+          ctx.fillRect(e.x - 3, e.y - 3, 6, 6);
+        } else if (e.type === 'explosion') {
+          ctx.globalCompositeOperation = 'lighter';
+          ctx.globalAlpha = (1 - e.progress) * 0.8;
+          ctx.fillStyle = '#ff6600';
+          ctx.fillRect(e.x - e.size/2, e.y - e.size/2, e.size, e.size);
+        } else if (e.type === 'slash') {
+          ctx.globalCompositeOperation = 'lighter';
+          const alpha = (1 - e.progress) * 0.9;
+          ctx.globalAlpha = alpha;
+          e.x += e.vx;
+          e.y += e.vy;
+          ctx.fillStyle = '#ffcc00';
+          ctx.fillRect(e.x - e.size/2, e.y - e.size/2, e.size, e.size);
+          ctx.fillStyle = '#ffffff';
+          ctx.fillRect(e.x - e.size/4, e.y - e.size/4, e.size/2, e.size/2);
+        } else if (e.type === 'death') {
+          ctx.globalAlpha = 1 - e.progress;
+          for (let i = 0; i < 15; i++) {
+            const angle = (i / 15) * Math.PI * 2;
+            const dist = e.progress * 60;
+            ctx.fillStyle = `rgba(80, 80, 80, ${1 - e.progress})`;
+            ctx.fillRect(e.x + Math.cos(angle) * dist - 5, e.y + Math.sin(angle) * dist - 5, 10, 10);
+          }
+        } else if (e.type === 'damage') {
+          ctx.fillStyle = `rgba(255, 50, 50, ${1 - e.progress})`;
+          ctx.font = 'bold 24px monospace';
+          ctx.textAlign = 'center';
+          ctx.fillText('-' + e.damage, e.x, e.y - e.progress * 50);
+        }
+      });
+
+      ctx.restore();
+    }
+
+    // ============ 冷却更新 ============
+    function updateCooldown(dt) {
+      if (boss.swordCooldown > 0) boss.swordCooldown -= dt;
+      if (boss.ballCooldown > 0) boss.ballCooldown -= dt;
+      if (boss.breathCooldown > 0) boss.breathCooldown -= dt;
+      if (boss.aoeCooldown > 0) boss.aoeCooldown -= dt;
+      updateCooldownUI();
+    }
+
+    function updateCooldownUI() {
+      const formatCD = (cd) => cd > 0 ? (cd / 1000).toFixed(1) + 's' : '就绪';
+      document.getElementById('swordCD').textContent = formatCD(boss.swordCooldown);
+      document.getElementById('ballCD').textContent = formatCD(boss.ballCooldown);
+      const fbState = boss.flameBreath.state;
+      document.getElementById('breathCD').textContent = fbState !== 'IDLE' ? fbState : formatCD(boss.breathCooldown);
+      const gsState = boss.groundSlam.state;
+      document.getElementById('aoeCD').textContent = gsState !== 'IDLE' ? gsState : formatCD(boss.aoeCooldown);
+    }
+
+    // ============ 背景与阴影 ============
+    function drawBackground() {
+      const groundY = 400;
+      for (let i = 0; i < 14; i++) {
+        ctx.fillStyle = i % 2 === 0 ? '#1a1a2e' : '#151525';
+        ctx.fillRect(i * 50, groundY, 50, 100);
+        ctx.strokeStyle = '#252535';
+        ctx.lineWidth = 1;
+        ctx.strokeRect(i * 50, groundY, 50, 100);
+      }
+
+      ctx.fillStyle = 'rgba(30, 30, 50, 0.5)';
+      ctx.fillRect(30, 100, 80, 280);
+      ctx.fillRect(590, 120, 80, 260);
+    }
+
+    function drawShadow(x, y) {
+      ctx.fillStyle = 'rgba(0,0,0,0.3)';
+      ctx.beginPath();
+      ctx.ellipse(x, y + 50, 40 * boss.shadowScale, 10, 0, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    function drawTarget() {
+      ctx.save();
+      ctx.strokeStyle = '#4ecdc4';
+      ctx.lineWidth = 2;
+      ctx.setLineDash([5, 5]);
+      ctx.beginPath();
+      ctx.arc(targetPoint.x, targetPoint.y, 25, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.setLineDash([]);
+
+      ctx.fillStyle = 'rgba(78, 205, 196, 0.3)';
+      ctx.beginPath();
+      ctx.arc(targetPoint.x, targetPoint.y, 20, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.fillStyle = '#4ecdc4';
+      ctx.font = '12px monospace';
+      ctx.textAlign = 'center';
+      ctx.fillText('目标', targetPoint.x, targetPoint.y - 30);
+      ctx.restore();
+    }
+
+    // ============ 状态切换 ============
+    function setState(newState) {
+      if (boss.flameSword.state !== 'IDLE') return;
+      if (boss.flameBreath.state !== 'IDLE') return;
+      if (boss.groundSlam.state !== 'IDLE') return;
+
+      if (newState === 'dead') {
+        // 触发死亡动画
+        if (boss.death.state === 'IDLE' && boss.isAlive) {
+          boss.death.state = 'DYING';
+          boss.death.phase = 0;
+          boss.death.timer = 0;
+          boss.death.particles = [];
+          boss.death.ashParticles = [];
+          boss.death.swordDropped = false;
+          boss.death.burnMark = null;
+          boss.state = 'dead';
+        }
+        return;
+      }
+
+      // 如果BOSS已死亡且不在IDLE，不响应
+      if (!boss.isAlive && boss.death.state !== 'IDLE') return;
+
+      boss.state = newState;
+      boss.effects = boss.effects.filter(e => e.type === 'death' || e.type === 'damage');
+      boss.flashTimer = 0;
+
+      // 如果BOSS死了但想恢复
+      if (!boss.isAlive && (newState === 'idle' || newState === 'walk')) {
+        resetBoss();
+        return;
+      }
+
+      if (newState === 'hurt') {
+        boss.flashTimer = 400;
+        boss.effects.push({
+          type: 'damage',
+          x: boss.x, y: boss.y - 70,
+          damage: Math.floor(Math.random() * 20) + 10,
+          life: 800, maxLife: 800, progress: 0,
+        });
+      }
+    }
+
+    function resetBoss() {
+      boss.isAlive = true;
+      boss.death.state = 'IDLE';
+      boss.death.phase = 0;
+      boss.death.timer = 0;
+      boss.death.particles = [];
+      boss.death.ashParticles = [];
+      boss.death.swordDropped = false;
+      boss.death.burnMark = null;
+      boss.state = 'idle';
+      boss.effects = [];
+      boss.flameSword.state = 'IDLE';
+      boss.flameBreath.state = 'IDLE';
+      boss.groundSlam.state = 'IDLE';
+      boss.flashTimer = 0;
+      updateCooldownUI();
+    }
+
+    // ============ 游戏循环 ============
+    let lastTime = 0;
+    function gameLoop(timestamp) {
+      const dt = timestamp - lastTime;
+      lastTime = timestamp;
+
+      ctx.fillStyle = '#0a0a12';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      if (screenShake.intensity > 0.1) {
+        screenShake.x = (Math.random() - 0.5) * screenShake.intensity;
+        screenShake.y = (Math.random() - 0.5) * screenShake.intensity;
+        screenShake.intensity *= 0.95;
+      } else {
+        screenShake.x = 0; screenShake.y = 0;
+      }
+
+      ctx.save();
+      ctx.translate(screenShake.x, screenShake.y);
+
+      drawBackground();
+
+      boss.breathOffset += dt * 0.003;
+
+      if (boss.state === 'walk') {
+        boss.walkOffset += dt * 0.008;
+        boss.x = boss.baseX + Math.sin(boss.walkOffset) * 100;
+        boss.shadowScale = 0.9 + Math.abs(Math.sin(boss.walkOffset)) * 0.1;
+      } else {
+        boss.x = boss.baseX;
+        boss.shadowScale = 1;
+      }
+
+      updateCooldown(dt);
+      updateFlameSword(dt);
+      updateFireBalls(dt);
+      updateFlameBreath(dt);
+      updateGroundSlam(dt);
+      updateDeathAnimation(dt);
+
+      boss.effects = boss.effects.filter(e => {
+        e.life -= dt;
+        return e.life > 0;
+      });
+
+      drawShadow(boss.x, boss.y);
+      drawTarget();
+      renderGroundSlamEffects();
+      renderFlameSword();
+      renderFireBalls();
+      renderFlameBreath();
+      renderDeathAnimation();
+      renderEffects();
+
+      // 根据死亡状态决定透明度
+      let bossAlpha = 1;
+      if (boss.death.state === 'DYING') {
+        if (boss.death.phase === 1) {
+          bossAlpha = Math.max(0, 1 - (boss.death.timer / 1000) * 0.8);
+        } else if (boss.death.phase === 2) {
+          bossAlpha = 0;
+        }
+      }
+      if (bossAlpha > 0) {
+        drawPixelBoss(bossAlpha);
+      }
+
+      ctx.restore();
+
+      requestAnimationFrame(gameLoop);
+    }
+
+    // ============ 事件 ============
+    canvas.addEventListener('click', (e) => {
+      const rect = canvas.getBoundingClientRect();
+      targetPoint.x = e.clientX - rect.left;
+      targetPoint.y = e.clientY - rect.top;
+    });
+
+    document.addEventListener('keydown', (e) => {
+      if (e.key === ' ') {
+        e.preventDefault();
+        setState('hurt');
+        return;
+      }
+      
+      if (e.key === 'r' || e.key === 'R') {
+        if (!boss.isAlive || boss.death.state !== 'IDLE') {
+          resetBoss();
+        }
+        return;
+      }
+
+      switch (e.key) {
+        case '1': setState('idle'); break;
+        case '2': setState('walk'); break;
+        case '3': setState('attack'); break;
+        case '4': setState('hurt'); break;
+        case '5': setState('dead'); break;
+        case 'q': triggerFlameSword(); break;
+        case 'w': triggerFireBall(); break;
+        case 'e': triggerFlameBreath(); break;
+        case 't': triggerGroundSlam(); break;
+      }
+    });
+
+    updateCooldownUI();
+    requestAnimationFrame(gameLoop);
+  </script>
+</body>
+</html>

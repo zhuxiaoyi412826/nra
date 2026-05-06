@@ -81,7 +81,7 @@
       weapon: { name: "武器箱", color: "#ff6fb0" },
       buff: { name: "增益", color: "#ffd36f" },
     },
-    GAME_SCALE: 2, // 游戏缩放比例
+    GAME_SCALE: 4, // 游戏缩放比例
   };
 
   root.config = {

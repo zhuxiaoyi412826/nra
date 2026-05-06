@@ -145,6 +145,20 @@
       bulletR: 3.6,
       bulletColor: "#ff6fb0",
     },
+    rocket_launcher: {
+      key: "rocket_launcher",
+      name: "火箭筒 (RPG-7)",
+      damage: 150,
+      fireInterval: 1.2,
+      magSize: 1,
+      reloadTime: 0.8,
+      spreadDeg: 1.0,
+      bulletsPerShot: 1,
+      bulletSpeed: 600, // scaled for game
+      kick: 10,
+      isRocket: true,
+      explosionRadius: 30
+    },
   });
 
   root.weapons = {

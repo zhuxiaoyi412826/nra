@@ -4,7 +4,7 @@
   const { circleRectHit, circleRectResolve } = root.collision;
   const { WEAPONS, PICKUP } = root.constants;
   const GAME_SCALE = Math.max(0.5, Math.min(3, Number(root.constants?.GAME_SCALE ?? 1) || 1));
-  const PLAYER_BASE_R = 16;
+  const PLAYER_BASE_R = 12;
   const ENEMY_BASE_R = { basic: 18, fast: 16, tank: 22, ranged: 17 };
   const ENEMY_ELITE_BONUS_R = 3;
   const SHOT_SPAWN_PAD = 6 * GAME_SCALE;
@@ -25,7 +25,7 @@
       this.fromPlayer = true;
       this.color = null;
     }
-    init({ x, y, vx, vy, dmg, ttl, fromPlayer, r, color }) {
+    init({ x, y, vx, vy, dmg, ttl, fromPlayer, r, color, isRocket, explosionRadius }) {
       this.active = true;
       this.x = x;
       this.y = y;
@@ -33,29 +33,33 @@
       this.vy = vy;
       this.dmg = dmg;
       this.ttl = ttl;
-      this.fromPlayer = fromPlayer;
-      this.r = r ?? 2.4;
-      this.color = color ?? null;
+      this.fromPlayer = fromPlayer ?? true;
+      this.r = r ?? 2 * GAME_SCALE;
+      this.color = color || "#ffffff";
+      this.isRocket = isRocket ?? false;
+      this.explosionRadius = explosionRadius ?? 30;
+      this.tailT = 0;
     }
     update(dt, world) {
-      if (!this.active) return;
+      if (!this.active) return null;
       this.ttl -= dt;
       if (this.ttl <= 0) {
         this.active = false;
-        return;
+        return { reason: "timeout" };
       }
       this.x += this.vx * dt;
       this.y += this.vy * dt;
       if (this.x < 0 || this.y < 0 || this.x > world.w || this.y > world.h) {
         this.active = false;
-        return;
+        return { reason: "hit_wall" };
       }
       for (const ob of world.obstacles) {
         if (circleRectHit(this.x, this.y, this.r, ob)) {
           this.active = false;
-          return;
+          return { reason: "hit_wall" };
         }
       }
+      return null;
     }
   }
 
@@ -74,6 +78,10 @@
       this.touchCd = 0;
       this.hitFlash = 0;
       this.shootCd = 0;
+      this.animTimer = 0;
+      this.animFrame = 0;
+      this.isAttacking = false;
+      this.facingLeft = false;
     }
     init(t, x, y, difficulty, elite) {
       this.active = true;
@@ -100,6 +108,16 @@
         this.speed = 88 + base * 10;
         this.touchDmg = 14 + base * 3;
         this.shootCd = 0;
+      } else if (t === "swordsman") {
+        this.r = 16 * GAME_SCALE;
+        this.maxHp = 45 + base * 10;
+        this.speed = 135 + base * 12;
+        this.touchDmg = 15 + base * 3;
+        this.shootCd = 0;
+        this.animTimer = 0;
+        this.animFrame = 0;
+        this.isAttacking = false;
+        this.facingLeft = false;
       } else {
         this.r = ENEMY_BASE_R.ranged * GAME_SCALE;
         this.maxHp = 30 + base * 10;
@@ -134,6 +152,26 @@
       const toP = { x: player.x - this.x, y: player.y - this.y };
       const dist = Math.hypot(toP.x, toP.y);
       const n = dist > 1e-6 ? { x: toP.x / dist, y: toP.y / dist } : { x: 0, y: 0 };
+      
+      if (this.type === "swordsman") {
+        this.facingLeft = n.x < 0;
+        if (this.isAttacking) {
+          this.animTimer += dt;
+          if (this.animTimer > 1 / 12) { // approx 12 fps
+            this.animTimer = 0;
+            this.animFrame++;
+            if (this.animFrame >= 8) {
+              this.isAttacking = false;
+              this.animFrame = 0;
+            }
+          }
+        } else if (dist < this.r + (player.r ?? 16) + 30) {
+          this.isAttacking = true;
+          this.animFrame = 0;
+          this.animTimer = 0;
+        }
+      }
+
       const nightBoost = isNight ? 1.15 : 1.0;
       const eliteBoost = this.elite ? 1.08 : 1.0;
       const pushingSlow = dist < this.r + (player.r ?? 16) ? 0.5 : 1.0;
@@ -245,6 +283,35 @@
     }
   }
 
+  class FloatingText {
+    constructor() {
+      this.active = false;
+      this.text = "";
+      this.x = 0;
+      this.y = 0;
+      this.color = "#ffffff";
+      this.ttl = 0;
+      this.maxTtl = 0;
+    }
+    init(text, x, y, color, ttl) {
+      this.active = true;
+      this.text = text;
+      this.x = x;
+      this.y = y;
+      this.color = color || "#ff0000";
+      this.ttl = ttl || 0.5;
+      this.maxTtl = this.ttl;
+    }
+    update(dt) {
+      if (!this.active) return;
+      this.ttl -= dt;
+      if (this.ttl <= 0) {
+        this.active = false;
+      }
+      this.y -= 20 * GAME_SCALE * dt; // float upwards
+    }
+  }
+
   class Player {
     constructor() {
       this.x = 0;
@@ -261,6 +328,7 @@
       this.inv = [
         { weapon: WEAPONS.pistol, mag: WEAPONS.pistol.magSize, reserve: 48, reloading: 0, cooldown: 0 },
         { weapon: WEAPONS.rifle, mag: WEAPONS.rifle.magSize, reserve: 90, reloading: 0, cooldown: 0 },
+        { weapon: WEAPONS.rocket_launcher, mag: WEAPONS.rocket_launcher.magSize, reserve: 10, reloading: 0, cooldown: 0 },
         { weapon: WEAPONS.shotgun, mag: WEAPONS.shotgun.magSize, reserve: 36, reloading: 0, cooldown: 0 },
       ];
       this.activeSlot = 0;
@@ -368,6 +436,8 @@
           fromPlayer: true,
           r: s.weapon.bulletR,
           color: s.weapon.bulletColor,
+          isRocket: s.weapon.isRocket,
+          explosionRadius: s.weapon.explosionRadius
         });
       }
       emit.muzzle(this.x + this.aimX * (this.r + MUZZLE_PAD), this.y + this.aimY * (this.r + MUZZLE_PAD), this.aimX, this.aimY, s.weapon.key);
@@ -489,5 +559,5 @@
     }
   }
 
-  root.entities = { Bullet, Enemy, Pickup, Particle, Player, CameraShake, SpecialProjectile, LightningFx, PICKUP, WEAPONS };
+  root.entities = { Bullet, Enemy, Pickup, Particle, FloatingText, Player, CameraShake, SpecialProjectile, LightningFx, PICKUP, WEAPONS };
 })();

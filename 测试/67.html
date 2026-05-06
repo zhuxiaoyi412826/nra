@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>Konva 火箭筒发射动画</title>
+    <script src="https://cdn.jsdelivr.net/npm/konva@9.2.0/konva.min.js"></script>
+    <style>
+        body {
+            margin: 0;
+            padding: 20px;
+            background: #1a1a2e;
+            display: flex;
+            justify-content: center;
+        }
+        #container {
+            border: 2px solid #4fc3f7;
+            border-radius: 8px;
+        }
+    </style>
+</head>
+<body>
+<div id="container"></div>
+
+<script>
+// 1. 初始化舞台和图层
+const stage = new Konva.Stage({
+    container: 'container',
+    width: 800,
+    height: 400
+});
+const layer = new Konva.Layer();
+stage.add(layer);
+
+// 2. 绘制火箭筒主体（固定在左侧）
+function drawRocketLauncher() {
+    // 火箭筒握把
+    const grip = new Konva.Rect({
+        x: 120,
+        y: 220,
+        width: 20,
+        height: 60,
+        fill: '#333',
+        cornerRadius: 5
+    });
+
+    // 火箭筒主体管道
+    const tube = new Konva.Rect({
+        x: 80,
+        y: 200,
+        width: 150,
+        height: 30,
+        fill: '#555',
+        cornerRadius: 15
+    });
+
+    // 火箭筒前端瞄准器
+    const sight = new Konva.Circle({
+        x: 220,
+        y: 190,
+        radius: 5,
+        fill: '#666'
+    });
+
+    // 火箭筒装饰条纹
+    const stripe = new Konva.Rect({
+        x: 90,
+        y: 210,
+        width: 100,
+        height: 10,
+        fill: '#e53935',
+        opacity: 0.8
+    });
+
+    layer.add(grip, tube, sight, stripe);
+}
+
+// 3. 创建火箭弹模型
+function createRocket() {
+    const rocket = new Konva.Group({
+        x: 220,  // 火箭筒出口位置
+        y: 215,
+        opacity: 0
+    });
+
+    // 火箭弹弹头（锥形）
+    const warhead = new Konva.RegularPolygon({
+        sides: 3,
+        radius: 12,
+        fill: '#ff9800',
+        rotation: 90
+    });
+
+    // 火箭弹弹身
+    const body = new Konva.Rect({
+        x: 10,
+        y: -8,
+        width: 30,
+        height: 16,
+        fill: '#f44336'
+    });
+
+    // 火箭弹尾翼
+    const fin1 = new Konva.Rect({ x: 35, y: -8, width: 8, height: 5, fill: '#ff5722' });
+    const fin2 = new Konva.Rect({ x: 35, y: 3, width: 8, height: 5, fill: '#ff5722' });
+
+    rocket.add(warhead, body, fin1, fin2);
+    layer.add(rocket);
+    return rocket;
+}
+
+// 4. 创建发射火焰特效
+function createFlame(x, y) {
+    const flame = new Konva.Group({ x, y, opacity: 0 });
+    const fire1 = new Konva.Circle({ radius: 15, fill: '#ff9800', opacity: 0.8 });
+    const fire2 = new Konva.Circle({ radius: 10, fill: '#ffeb3b', opacity: 0.9 });
+    flame.add(fire1, fire2);
+    layer.add(flame);
+    return flame;
+}
+
+// 5. 创建爆炸特效
+function createExplosion(x, y) {
+    const explosion = new Konva.Group({ x, y, opacity: 0 });
+    // 爆炸光圈
+    const circle1 = new Konva.Circle({ radius: 0, fill: '#ff5722', opacity: 0.9 });
+    const circle2 = new Konva.Circle({ radius: 0, fill: '#ffc107', opacity: 0.7 });
+    explosion.add(circle1, circle2);
+    layer.add(explosion);
+    return explosion;
+}
+
+// 6. 发射动画主逻辑
+async function fireAnimation() {
+    // 初始化元素
+    const rocket = createRocket();
+    const flame = createFlame(220, 215);
+    const explosion = createExplosion(750, 215);
+
+    // 1. 火箭弹加载显示
+    await new Promise(resolve => {
+        rocket.to({
+            opacity: 1,
+            duration: 0.2,
+            onFinish: resolve
+        });
+    });
+
+    // 2. 喷射火焰 + 火箭弹发射飞行
+    flame.to({ opacity: 1, duration: 0.05 });
+    rocket.to({ x: 750, duration: 0.8, easing: Konva.Easings.StrongEaseOut });
+
+    // 火焰消失
+    setTimeout(() => flame.to({ opacity: 0, duration: 0.1 }), 150);
+
+    // 3. 火箭弹到达目标 → 爆炸
+    await new Promise(resolve => setTimeout(resolve, 800));
+    rocket.destroy(); // 移除火箭弹
+
+    // 爆炸动画
+    explosion.to({ opacity: 1, duration: 0.1 });
+    explosion.getChildren()[0].to({ radius: 40, duration: 0.3 });
+    explosion.getChildren()[1].to({ radius: 25, duration: 0.25 });
+
+    // 爆炸消失
+    setTimeout(() => explosion.to({ opacity: 0, duration: 0.2 }), 300);
+    setTimeout(() => explosion.destroy(), 500);
+}
+
+// 初始化绘制
+drawRocketLauncher();
+layer.draw();
+
+// 自动循环发射（每隔2秒一次）
+setInterval(fireAnimation, 2000);
+</script>
+</body>
+</html>

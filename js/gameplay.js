@@ -2,8 +2,8 @@
   const root = (window.Shooter = window.Shooter || {});
   const { clamp, norm, rand, randInt, fmtTime, nowISO } = root.util;
   const { Pool } = root;
-  const { Bullet, Enemy, Pickup, Particle, Player, Boss, CameraShake, SpecialProjectile, LightningFx } = root.entities;
-  const { drawWorld, drawBullet, drawPickup, drawSpecial, drawLightning, drawEnemy, drawBoss, drawParticle, drawPlayer, nightOverlay } =
+  const { Bullet, Enemy, Pickup, Particle, Player, Boss, CameraShake, SpecialProjectile, LightningFx, FloatingText } = root.entities;
+  const { drawWorld, drawBullet, drawPickup, drawSpecial, drawLightning, drawEnemy, drawBoss, drawParticle, drawPlayer, nightOverlay, drawFloatingText } =
     root.render;
   const WORLD = root.WORLD;
   const GAME_SCALE = Math.max(0.5, Math.min(3, Number(root.constants?.GAME_SCALE ?? 1) || 1));
@@ -24,6 +24,7 @@
       this.enemies = new Pool(() => new Enemy(), 70);
       this.pickups = new Pool(() => new Pickup(), 50);
       this.particles = new Pool(() => new Particle(), 320);
+      this.floatingTexts = new Pool(() => new FloatingText(), 40);
       this.kills = 0;
       this.coins = 0;
       this.gems = 0;
@@ -75,6 +76,7 @@
       for (const it of this.enemies.items) it.active = false;
       for (const it of this.pickups.items) it.active = false;
       for (const it of this.particles.items) it.active = false;
+      for (const it of this.floatingTexts.items) it.active = false;
       this.boss.active = false;
       this.nextBossAt = 35;
       this.bossLevel = 1;
@@ -83,6 +85,7 @@
       this.special.rocket.cd = 0;
       this.special.thunder.cd = 0;
       this.thunder = null;
+      this.firstSwordsmanSpawned = false;
       this.spawnWave(6);
       this.audio.setAmbient(0.22);
     }
@@ -120,7 +123,7 @@
         ttlB: 0.55,
         sizeA: 1,
         sizeB: 5,
-        color: kind === "gunslinger" ? "#ffd36f" : "#7ad0ff",
+        color: kind === "fire_giant" ? "#ff4400" : (kind === "gunslinger" ? "#ffd36f" : "#7ad0ff"),
         alpha: 0.92,
         drag: 3.0,
         gravity: 200,
@@ -220,10 +223,25 @@
         gravity: 120,
       });
 
+      // Add a scorch mark
+      if (WORLD.details) {
+        WORLD.details.push({
+          x: x,
+          y: y,
+          type: 'tile', // We'll just use a dark tile as scorch or we can add a 'scorch' type in render.js
+          size: radius * 1.5,
+          rot: Math.random() * Math.PI * 2,
+          opacity: 0.3,
+          isScorch: true
+        });
+      }
+
       if (this.boss.active) {
         const dBoss = Math.hypot(x - this.boss.x, y - this.boss.y);
         if (dBoss <= radius + this.boss.r) {
-          const died = this.boss.hurt(dmg * 0.9);
+          const actualDmg = Math.floor(dmg * 0.9);
+          const died = this.boss.hurt(actualDmg);
+          this.floatingTexts.acquire().init(`-${actualDmg}`, this.boss.x, this.boss.y - this.boss.r, "#ff0000", 0.5);
           if (died) this.onBossKilled();
         }
       }
@@ -232,7 +250,9 @@
         const d = Math.hypot(x - e.x, y - e.y);
         if (d <= radius + e.r) {
           const scale = clamp(1 - d / (radius + e.r), 0.25, 1);
-          const died = e.hurt(dmg * scale);
+          const actualDmg = Math.floor(dmg * scale);
+          const died = e.hurt(actualDmg);
+          this.floatingTexts.acquire().init(`-${actualDmg}`, e.x, e.y - e.r, "#ff0000", 0.5);
           if (died) {
             this.kills += 1;
             this.audio.enemyDie(e.elite);
@@ -267,9 +287,17 @@
       const base = this.difficulty;
       const roll = Math.random();
       let type = "basic";
-      if (roll < 0.12 + base * 0.02) type = "fast";
-      else if (roll < 0.18 + base * 0.03) type = "tank";
-      else if (roll < 0.18 + base * 0.06) type = "ranged";
+      
+      if (this.kills === 0 && this.enemies.activeCount === 0 && !this.firstSwordsmanSpawned) {
+        type = "swordsman";
+        this.firstSwordsmanSpawned = true;
+      } else {
+        if (roll < 0.12 + base * 0.02) type = "fast";
+        else if (roll < 0.18 + base * 0.03) type = "tank";
+        else if (roll < 0.18 + base * 0.06) type = "ranged";
+        else if (roll < 0.25 + base * 0.08) type = "swordsman";
+      }
+
       const elite = Math.random() < this.eliteChance() * (night ? 1.25 : 1);
       const edge = randInt(0, 3);
       let x = 0;
@@ -639,7 +667,10 @@
       audio.setAmbient(night ? 0.58 : 0.22);
 
       if (!this.boss.active && this.kills >= this.nextBossAt) {
-        const kind = Math.random() < 0.55 ? "core" : "gunslinger";
+        const randKind = Math.random();
+        let kind = "core";
+        if (randKind < 0.33) kind = "gunslinger";
+        else if (randKind < 0.66) kind = "fire_giant";
         this.boss.init(this.bossLevel + Math.floor(this.difficulty), kind);
         audio.bossSpawn();
         this.spawnBurst(this.boss.x, this.boss.y, { count: 46, speed: 420, spread: 3.14, ttlA: 0.2, ttlB: 0.5, sizeA: 1, sizeB: 4, color: "#ffd36f", alpha: 0.9, drag: 3.2, gravity: 200 });
@@ -659,7 +690,44 @@
       );
       if (this.player.hp <= 0) this.die("生命耗尽");
 
-      for (const b of this.bullets.items) b.update(dt, WORLD);
+      for (const b of this.bullets.items) {
+        if (!b.active) continue;
+        const ev = b.update(dt, WORLD);
+        if (ev && ev.reason === "hit_wall" && b.isRocket) {
+           this.explode(b.x, b.y, b.explosionRadius * GAME_SCALE, b.dmg, b.fromPlayer, shake);
+        }
+        
+        if (b.active && b.isRocket) {
+          b.tailT += dt;
+          if (b.tailT > 0.02) {
+            b.tailT = 0;
+            this.spawnBurst(b.x - b.vx * 0.05, b.y - b.vy * 0.05, {
+              count: 3,
+              speed: 10 * GAME_SCALE,
+              spread: 0.5,
+              ttlA: 0.2,
+              ttlB: 0.4,
+              sizeA: 2 * GAME_SCALE,
+              sizeB: 4 * GAME_SCALE,
+              color: "#ff6600",
+              alpha: 0.8,
+              drag: 2
+            });
+            this.spawnBurst(b.x - b.vx * 0.08, b.y - b.vy * 0.08, {
+              count: 2,
+              speed: 5 * GAME_SCALE,
+              spread: 0.2,
+              ttlA: 0.3,
+              ttlB: 0.6,
+              sizeA: 3 * GAME_SCALE,
+              sizeB: 5 * GAME_SCALE,
+              color: "rgba(100,100,100,0.5)",
+              alpha: 0.5,
+              drag: 4
+            });
+          }
+        }
+      }
       for (const s of this.specials.items) {
         const ev = s.update(dt, WORLD);
         if (ev) {
@@ -691,6 +759,7 @@
       for (const e of this.enemies.items) e.update(dt, WORLD, this.player, this.bullets, this.difficulty, night, audio);
       for (const p of this.pickups.items) p.update(dt);
       for (const p of this.particles.items) p.update(dt);
+      for (const t of this.floatingTexts.items) t.update(dt);
       for (const f of this.fx.items) f.update(dt);
       for (const b of WORLD.barrels) {
         if (!b.active) continue;
@@ -703,8 +772,11 @@
             if (b.hp <= 0) {
               b.active = false;
               this.explodeBarrel(b.x, b.y);
-            } else {
+            } else if (!bul.isRocket) {
               this.hitEnemy(bul.x, bul.y);
+            }
+            if (bul.isRocket) {
+              this.explode(bul.x, bul.y, bul.explosionRadius * GAME_SCALE, bul.dmg, true, shake);
             }
           }
         }
@@ -787,8 +859,17 @@
           },
           audio,
           this.difficulty,
-          night
+          night,
+          shake
         );
+
+        if (this.boss.kind === "fire_giant" && this.boss.fg && this.boss.fg.readyToDie) {
+          this.boss.fg.readyToDie = false;
+          this.boss.active = false;
+          this.kills += 1;
+          this.killEnemy(this.boss.x, this.boss.y, true);
+          this.onBossKilled();
+        }
       }
 
       this.resolveBodyPushes();
@@ -799,11 +880,15 @@
           const dBoss = Math.hypot(b.x - this.boss.x, b.y - this.boss.y);
           if (dBoss <= (b.r ?? 2.4) + this.boss.r) {
             b.active = false;
-            audio.hit();
-            this.hitEnemy(b.x, b.y);
-            const died = this.boss.hurt(b.dmg);
-            if (died) {
-              this.onBossKilled();
+            if (b.isRocket) {
+              this.explode(b.x, b.y, b.explosionRadius * GAME_SCALE, b.dmg, true, shake);
+            } else {
+              audio.hit();
+              this.hitEnemy(b.x, b.y);
+              const died = this.boss.hurt(b.dmg);
+              if (died) {
+                this.onBossKilled();
+              }
             }
             continue;
           }
@@ -813,16 +898,20 @@
           const d = Math.hypot(b.x - e.x, b.y - e.y);
           if (d <= b.r + e.r) {
             b.active = false;
-            const died = e.hurt(b.dmg);
-            audio.hit();
-            shake.kick(1.4);
-            this.hitEnemy(b.x, b.y);
-            if (died) {
-              this.kills += 1;
-              audio.enemyDie(e.elite);
-              this.killEnemy(e.x, e.y, e.elite);
-              this.tryDrop(e.x, e.y, e.elite);
-              this.progressKillDrops(e.x, e.y, e.elite);
+            if (b.isRocket) {
+              this.explode(b.x, b.y, b.explosionRadius * GAME_SCALE, b.dmg, true, shake);
+            } else {
+              const died = e.hurt(b.dmg);
+              audio.hit();
+              shake.kick(1.4);
+              this.hitEnemy(b.x, b.y);
+              if (died) {
+                this.kills += 1;
+                audio.enemyDie(e.elite);
+                this.killEnemy(e.x, e.y, e.elite);
+                this.tryDrop(e.x, e.y, e.elite);
+                this.progressKillDrops(e.x, e.y, e.elite);
+              }
             }
             break;
           }
@@ -884,6 +973,7 @@
       for (const f of this.fx.items) drawLightning(ctx, this.cam, f);
       for (const p of this.particles.items) drawParticle(ctx, this.cam, p);
       drawPlayer(ctx, atlas, this.cam, this.player);
+      for (const t of this.floatingTexts.items) drawFloatingText(ctx, this.cam, t);
       nightOverlay(ctx, viewW, viewH, this.nightFactor());
     }
   }

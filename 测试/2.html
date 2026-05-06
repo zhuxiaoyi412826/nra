@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>像素角色挥刀动画</title>
+    <style>
+        body {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+            background: #f0f0f0;
+        }
+        canvas {
+            background: #fff;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+<canvas id="gameCanvas" width="400" height="500"></canvas>
+
+<script>
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+
+// 1. 精灵图配置（适配你当前的 4列×2行 序列帧）
+const spriteSheet = new Image();
+// 把你的这张图片命名为 attack_frames.png，和html放同一文件夹
+spriteSheet.src = 'attack_frames.png';
+
+// 关键参数（必须和你的图片匹配！）
+const TOTAL_COLS = 4;      // 列数
+const TOTAL_ROWS = 2;      // 行数
+const TOTAL_FRAMES = 8;    // 总帧数（4×2）
+const FRAME_SPEED = 6;     // 动画速度（越小越快）
+const SCALE = 1.6;         // 角色缩放
+let frameWidth, frameHeight; // 单帧宽高，图片加载后自动计算
+
+// 2. 动画状态
+let frameIndex = 0;
+let frameCounter = 0;
+let isAttacking = false;
+const drawX = 80;  // 角色绘制位置X
+const drawY = 80;  // 角色绘制位置Y
+
+// 3. 点击触发攻击动画
+canvas.addEventListener('click', () => {
+    if (!isAttacking) {
+        isAttacking = true;
+        frameIndex = 0; // 从第0帧开始播放完整动画
+    }
+});
+
+// 4. 动画循环
+function animate() {
+    // 清空画布
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    // 图片没加载完就等待
+    if (!spriteSheet.complete || !frameWidth) {
+        requestAnimationFrame(animate);
+        return;
+    }
+
+    // 更新帧计数器，控制播放速度
+    frameCounter++;
+    if (frameCounter >= FRAME_SPEED) {
+        frameCounter = 0;
+        frameIndex++;
+
+        // 动画播放完毕，重置状态
+        if (frameIndex >= TOTAL_FRAMES) {
+            isAttacking = false;
+            frameIndex = 0; // 回到第0帧（待机帧）
+        }
+    }
+
+    // 计算当前帧在精灵图中的位置
+    const col = frameIndex % TOTAL_COLS;
+    const row = Math.floor(frameIndex / TOTAL_COLS);
+    const sx = col * frameWidth;
+    const sy = row * frameHeight;
+
+    // 绘制当前帧
+    ctx.drawImage(
+        spriteSheet,
+        sx, sy, frameWidth, frameHeight, // 从精灵图截取的区域
+        drawX, drawY, frameWidth * SCALE, frameHeight * SCALE // 绘制到画布的位置和大小
+    );
+
+    requestAnimationFrame(animate);
+}
+
+// 图片加载完成后初始化参数并启动动画
+spriteSheet.onload = () => {
+    // 自动计算单帧宽高
+    frameWidth = spriteSheet.width / TOTAL_COLS;
+    frameHeight = spriteSheet.height / TOTAL_ROWS;
+    animate();
+};
+
+// 错误提示
+spriteSheet.onerror = () => {
+    alert('请将序列帧图片命名为 attack_frames.png 并与HTML文件放在同一文件夹！');
+};
+</script>
+</body>
+</html>
