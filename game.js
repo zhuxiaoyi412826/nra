@@ -66,9 +66,6 @@
       this.fireHeld = false;
       this.reloadPressed = false;
       this.swapPressed = false;
-      this.specialQPressed = false;
-      this.specialEPressed = false;
-      this.specialRPressed = false;
       this.pausePressed = false;
       this.shopPressed = false;
       this.rollPressed = false;
@@ -82,11 +79,9 @@
     resetFrame() {
       this.reloadPressed = false;
       this.swapPressed = false;
-      this.specialQPressed = false;
-      this.specialEPressed = false;
-      this.specialRPressed = false;
       this.pausePressed = false;
       this.shopPressed = false;
+      this.rollPressed = false;
       this.selectSlot = null;
       this.equipWeaponKey = null;
     }
@@ -225,9 +220,9 @@
     audio.unlock();
     input.keys.add(e.code);
     if (e.code === "KeyF") input.reloadPressed = true;
-    if (e.code === "KeyQ") input.specialQPressed = true;
-    if (e.code === "KeyE") input.specialEPressed = true;
-    if (e.code === "KeyR") input.specialRPressed = true;
+    if (e.code === "KeyQ") input.equipWeaponKey = "grenade";
+    if (e.code === "KeyE") input.equipWeaponKey = "rocket_launcher";
+    if (e.code === "KeyR") input.equipWeaponKey = "thunder_gun";
     if (e.code === "Digit1") input.selectSlot = 0;
     if (e.code === "Digit2") input.selectSlot = 1;
     if (e.code === "Digit3") input.selectSlot = 2;
@@ -498,9 +493,6 @@
           if (input.equipWeaponKey) equipWeaponByKey(input.equipWeaponKey);
           if (input.selectSlot != null) game.player.selectWeapon(input.selectSlot);
           if (input.swapPressed) game.player.swapWeapon();
-          if (input.specialQPressed) game.useSpecial("grenade", shake);
-          if (input.specialEPressed) game.useSpecial("rocket", shake);
-          if (input.specialRPressed) game.useSpecial("thunder", shake);
           game.update(dt, input, shake, audio, t / 1000);
         } else if (game.state === "paused") {
           if (input.pausePressed) game.resume();

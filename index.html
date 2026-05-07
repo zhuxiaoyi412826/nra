@@ -46,9 +46,9 @@
             <div class="stat"><span class="k">钻石</span><span id="txt-gems" class="v">0</span></div>
           </div>
           <div class="stats specials">
-            <div class="stat"><span class="k">Q 手雷</span><span id="txt-sp-q" class="v">就绪</span></div>
-            <div class="stat"><span class="k">E 火箭筒</span><span id="txt-sp-e" class="v">就绪</span></div>
-            <div class="stat"><span class="k">R 雷暴</span><span id="txt-sp-r" class="v">就绪</span></div>
+            <div class="stat"><span class="k">Q 武器</span><span class="v">手雷</span></div>
+            <div class="stat"><span class="k">E 武器</span><span class="v">火箭筒</span></div>
+            <div class="stat"><span class="k">R 武器</span><span class="v">雷暴枪</span></div>
           </div>
           <div id="buffs" class="buffs" aria-label="buffs"></div>
         </div>
@@ -227,6 +227,10 @@
                 <div class="boss-name">火焰巨人</div>
                 <div class="boss-desc">火焰刀 / 火焰球 / 火焰吐息 / 地面重击</div>
               </button>
+              <button class="boss-card" type="button" data-boss-spawn="morphila">
+                <div class="boss-name">幽影咒主</div>
+                <div class="boss-desc">暗影咒缚 / 幽影弹幕 / 暗域侵蚀 / 暗影湮灭</div>
+              </button>
             </div>
           </div>
 
@@ -254,6 +258,7 @@
       </div>
     </div>
 
+    <script src="https://cdn.jsdelivr.net/npm/konva@9.3.1/konva.min.js"></script>
     <script src="./js/core.js"></script>
     <script src="./js/weapons.js"></script>
     <script src="./js/world.js"></script>

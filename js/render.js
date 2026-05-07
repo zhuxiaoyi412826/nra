@@ -46,6 +46,10 @@
         fire_giant: {
           idle: this.makeFireGiantBoss(),
           enraged: this.makeFireGiantBoss()
+        },
+        morphila: {
+          idle: this.makeMorphilaKonva(false),
+          enraged: this.makeMorphilaKonva(true)
         }
       };
     }
@@ -256,6 +260,74 @@
       return c;
     }
 
+    makeMorphilaKonva(enraged) {
+      const c = mkCanvas(128, 128);
+      const ctx = c.getContext("2d");
+      
+      if (typeof Konva === 'undefined') {
+        // Fallback if Konva fails to load
+        ctx.fillStyle = enraged ? '#ff0000' : '#800080';
+        ctx.fillRect(32, 32, 64, 64);
+        return c;
+      }
+      
+      const container = document.createElement('div');
+      const stage = new Konva.Stage({ container, width: 128, height: 128 });
+      const layer = new Konva.Layer();
+      
+      const crystalColor = enraged ? '#ff2a2a' : '#9b59b6';
+      const bodyColor = '#1a1124';
+      const robeColor = '#2b1a3a';
+      
+      // Aura/Fog background
+      const fog = new Konva.Circle({
+        x: 64, y: 64, radius: 45,
+        fillRadialGradientStartPoint: { x: 0, y: 0 },
+        fillRadialGradientStartRadius: 0,
+        fillRadialGradientEndPoint: { x: 0, y: 0 },
+        fillRadialGradientEndRadius: 45,
+        fillRadialGradientColorStops: [0, enraged ? 'rgba(255,0,0,0.3)' : 'rgba(128,0,128,0.3)', 1, 'rgba(0,0,0,0)']
+      });
+      layer.add(fog);
+      
+      // Robe body
+      layer.add(new Konva.Rect({ x: 44, y: 40, width: 40, height: 60, fill: robeColor, cornerRadius: 5 }));
+      // Runes on robe
+      layer.add(new Konva.Rect({ x: 50, y: 50, width: 28, height: 4, fill: '#000' }));
+      layer.add(new Konva.Rect({ x: 50, y: 65, width: 28, height: 4, fill: '#000' }));
+      layer.add(new Konva.Rect({ x: 50, y: 80, width: 28, height: 4, fill: '#000' }));
+      
+      // Head
+      layer.add(new Konva.Circle({ x: 64, y: 25, radius: 15, fill: bodyColor }));
+      
+      // Crown
+      layer.add(new Konva.Line({
+        points: [50, 20, 55, 5, 64, 15, 73, 5, 78, 20],
+        fill: '#8b6508',
+        closed: true
+      }));
+      layer.add(new Konva.Circle({ x: 64, y: 12, radius: 5, fill: crystalColor }));
+      
+      // Eyes
+      layer.add(new Konva.Rect({ x: 56, y: 22, width: 6, height: 4, fill: crystalColor }));
+      layer.add(new Konva.Rect({ x: 66, y: 22, width: 6, height: 4, fill: crystalColor }));
+      
+      // Staff (Left hand)
+      layer.add(new Konva.Rect({ x: 30, y: 10, width: 6, height: 90, fill: '#111' })); // pole
+      layer.add(new Konva.Circle({ x: 33, y: 8, radius: 10, fill: crystalColor })); // crystal
+      layer.add(new Konva.Line({ points: [28, 30, 20, 40, 38, 50, 28, 60], stroke: '#333', strokeWidth: 2 })); // vines
+      layer.add(new Konva.Rect({ x: 34, y: 45, width: 12, height: 10, fill: bodyColor })); // arm
+      
+      // Right hand
+      layer.add(new Konva.Rect({ x: 82, y: 45, width: 12, height: 10, fill: bodyColor })); // arm
+      
+      stage.add(layer);
+      
+      // Convert Konva to native canvas
+      ctx.drawImage(layer.getNativeCanvasElement(), 0, 0);
+      return c;
+    }
+
     makeFireGiantBoss() {
       const c = mkCanvas(128, 128);
       const ctx = c.getContext("2d");
@@ -433,6 +505,18 @@
           ctx.beginPath();
           ctx.arc(0, 0, d.size/2, 0, Math.PI * 2);
           ctx.fill();
+        } else if (d.type === 'gore') {
+          ctx.fillStyle = d.color || '#8b2a2a';
+          ctx.globalAlpha = d.opacity * 0.8;
+          ctx.beginPath();
+          ctx.arc(0, 0, d.size/2, 0, Math.PI * 2);
+          ctx.fill();
+          // splatter sub-particles
+          ctx.beginPath();
+          ctx.arc(-d.size/3, d.size/3, d.size/4, 0, Math.PI * 2);
+          ctx.arc(d.size/2, -d.size/4, d.size/3, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.globalAlpha = 1;
         } else {
           ctx.fillStyle = d.type === 'grass' ? `rgba(40,200,80,${d.opacity})` : `rgba(255,255,255,${d.opacity})`;
           if (d.type === 'tile') {
@@ -1293,6 +1377,89 @@
     ctx.fillRect(sx - boss.r, sy - boss.r - 14, boss.r * 2 * hpPct, 6);
   };
 
+  const drawMorphilaBoss = (ctx, atlas, cam, b) => {
+    if (!b || !b.active) return;
+    const sx = b.x - cam.x;
+    const sy = b.y - cam.y;
+    
+    // Domain
+    if (b.mp && b.mp.domain && b.mp.domain.active) {
+      ctx.save();
+      ctx.translate(b.mp.domain.x - cam.x, b.mp.domain.y - cam.y);
+      ctx.fillStyle = 'rgba(20, 0, 30, 0.4)';
+      ctx.strokeStyle = '#9b59b6';
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.arc(0, 0, b.mp.domain.r, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+      ctx.restore();
+    }
+    
+    // Binds
+    if (b.mp && b.mp.binds) {
+      for (const bind of b.mp.binds) {
+        ctx.save();
+        ctx.translate(bind.x - cam.x, bind.y - cam.y);
+        ctx.fillStyle = 'rgba(40, 0, 60, 0.5)';
+        ctx.strokeStyle = '#ff2a2a';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(0, 0, bind.r, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+        ctx.restore();
+      }
+    }
+
+    const state = b.phase >= 2 ? atlas.boss.morphila.enraged : atlas.boss.morphila.idle;
+    const crystalColor = b.phase >= 2 ? '#ff2a2a' : '#9b59b6';
+    
+    const wave = Math.sin(b.walkAnim || 0);
+    const bob = Math.abs(wave) * 4 * GAME_SCALE;
+    const swing = wave * 15;
+    
+    ctx.save();
+    ctx.translate(Math.round(sx), Math.round(sy - bob));
+    
+    // Floating crystals
+    if (b.mp && b.mp.crystals) {
+      for (let i = 0; i < 3; i++) {
+        const a = b.mp.crystals[i].a;
+        const cx = Math.cos(a) * 50 * GAME_SCALE;
+        const cy = Math.sin(a) * 50 * GAME_SCALE;
+        ctx.fillStyle = crystalColor;
+        ctx.beginPath();
+        ctx.arc(cx, cy, 6 * GAME_SCALE, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+    
+    // Ult shadow beast
+    if (b.skill === "ult" && b.skillStep === 1 && b.mp) {
+      ctx.fillStyle = 'rgba(26, 0, 42, 0.6)';
+      ctx.beginPath();
+      const p = b.skillT / 3.0; // 0 to 1
+      ctx.arc(0, -60 * GAME_SCALE, 60 * GAME_SCALE * p, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    
+    ctx.rotate((swing * Math.PI) / 180 * 0.2); // slight body tilt
+    ctx.drawImage(state, -64 * GAME_SCALE, -64 * GAME_SCALE, 128 * GAME_SCALE, 128 * GAME_SCALE);
+    
+    ctx.restore();
+    
+    // hit flash
+    if (b.hitFlash > 0) {
+      ctx.globalCompositeOperation = "source-atop";
+      ctx.fillStyle = "white";
+      ctx.globalAlpha = 0.6;
+      ctx.fillRect(Math.round(sx - b.r), Math.round(sy - b.r - bob), Math.round(b.r * 2), Math.round(b.r * 2));
+      ctx.globalAlpha = 1;
+      ctx.globalCompositeOperation = "source-over";
+    }
+  };
+
   const drawBoss = (ctx, atlas, cam, boss) => {
     if (!boss || !boss.active) return;
     if (boss.kind === "fire_giant" && boss.fg) {
@@ -1301,6 +1468,10 @@
     }
     if (boss.kind === "gunslinger") {
       drawGunslingerBoss(ctx, cam, boss);
+      return;
+    }
+    if (boss.kind === "morphila") {
+      drawMorphilaBoss(ctx, atlas, cam, boss);
       return;
     }
     if (boss.kind === "core") {
@@ -1578,6 +1749,11 @@
       ctx.scale(-1, 1);
     }
     
+    // Roll effect
+    if (p.rollTimer > 0) {
+      ctx.rotate(p.rollTimer * 20); // Fast spinning
+    }
+    
     ctx.globalAlpha = p.invuln > 0 ? 0.6 : 1;
     
     ctx.save();
@@ -1589,7 +1765,7 @@
     
     // Draw Weapon
     const slot = p.slot;
-    if (slot && slot.weapon) {
+    if (slot && slot.weapon && p.rollTimer <= 0) {
       ctx.save();
       // Translate to hand position (approximate)
       // In makePlayer, right arm is at x=12 (which is -12 from center 24)
@@ -1611,6 +1787,44 @@
       
       if (slot.weapon.key === "rocket_launcher") {
         drawRocketLauncher(ctx, p, slot);
+      } else if (slot.weapon.key === "grenade") {
+        // Draw Grenade in hand
+        ctx.fillStyle = "#2d5a27"; // dark green body
+        ctx.fillRect(-2 * GAME_SCALE, -4 * GAME_SCALE, 6 * GAME_SCALE, 8 * GAME_SCALE);
+        ctx.fillStyle = "#1a3617"; // pattern
+        ctx.fillRect(-1 * GAME_SCALE, -3 * GAME_SCALE, 4 * GAME_SCALE, 2 * GAME_SCALE);
+        ctx.fillRect(-1 * GAME_SCALE, 1 * GAME_SCALE, 4 * GAME_SCALE, 2 * GAME_SCALE);
+        ctx.fillStyle = "#555"; // top pin area
+        ctx.fillRect(0 * GAME_SCALE, -6 * GAME_SCALE, 2 * GAME_SCALE, 2 * GAME_SCALE);
+        ctx.strokeStyle = "#888"; // pin ring
+        ctx.beginPath();
+        ctx.arc(3 * GAME_SCALE, -6 * GAME_SCALE, 1.5 * GAME_SCALE, 0, Math.PI * 2);
+        ctx.stroke();
+      } else if (slot.weapon.key === "thunder_gun") {
+        // Draw Thunder Gun (sci-fi tech weapon)
+        ctx.fillStyle = "#223"; // main body
+        ctx.fillRect(-2 * GAME_SCALE, -3 * GAME_SCALE, 18 * GAME_SCALE, 6 * GAME_SCALE);
+        ctx.fillStyle = "#112"; // grip
+        ctx.fillRect(2 * GAME_SCALE, 3 * GAME_SCALE, 4 * GAME_SCALE, 6 * GAME_SCALE);
+        ctx.fillStyle = "#7ad0ff"; // energy core
+        const pulse = 0.5 + 0.5 * Math.sin((performance.now() / 1000) * 8);
+        ctx.globalAlpha = 0.5 + 0.5 * pulse;
+        ctx.fillRect(4 * GAME_SCALE, -2 * GAME_SCALE, 8 * GAME_SCALE, 4 * GAME_SCALE);
+        ctx.globalAlpha = 1;
+        ctx.fillStyle = "#4af"; // barrel rails
+        ctx.fillRect(14 * GAME_SCALE, -4 * GAME_SCALE, 6 * GAME_SCALE, 2 * GAME_SCALE);
+        ctx.fillRect(14 * GAME_SCALE, 2 * GAME_SCALE, 6 * GAME_SCALE, 2 * GAME_SCALE);
+        ctx.fillStyle = "#fff"; // muzzle node
+        ctx.beginPath();
+        ctx.arc(21 * GAME_SCALE, 0, 1.5 * GAME_SCALE, 0, Math.PI * 2);
+        ctx.fill();
+        if (slot.cooldown > 0) {
+          ctx.strokeStyle = "#7ad0ff";
+          ctx.beginPath();
+          ctx.moveTo(21 * GAME_SCALE, 0);
+          ctx.lineTo(26 * GAME_SCALE + Math.random() * 4 * GAME_SCALE, (Math.random() - 0.5) * 4 * GAME_SCALE);
+          ctx.stroke();
+        }
       } else {
         // Generic simple gun drawing for other weapons
         ctx.fillStyle = "#333";

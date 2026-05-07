@@ -159,6 +159,32 @@
       isRocket: true,
       explosionRadius: 30
     },
+    grenade: {
+      key: "grenade",
+      name: "手雷",
+      damage: 75,
+      fireInterval: 1.0,
+      magSize: 1,
+      reloadTime: 0.5,
+      spreadDeg: 0,
+      bulletsPerShot: 1,
+      bulletSpeed: 520,
+      kick: 2,
+      isGrenade: true,
+    },
+    thunder_gun: {
+      key: "thunder_gun",
+      name: "雷暴枪",
+      damage: 40,
+      fireInterval: 1.6,
+      magSize: 1,
+      reloadTime: 0.5,
+      spreadDeg: 0,
+      bulletsPerShot: 1,
+      bulletSpeed: 0,
+      kick: 4,
+      isThunder: true,
+    },
   });
 
   root.weapons = {

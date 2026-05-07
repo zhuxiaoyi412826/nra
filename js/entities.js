@@ -25,7 +25,7 @@
       this.fromPlayer = true;
       this.color = null;
     }
-    init({ x, y, vx, vy, dmg, ttl, fromPlayer, r, color, isRocket, explosionRadius }) {
+    init({ x, y, vx, vy, dmg, ttl, fromPlayer, r, color, isRocket, explosionRadius, homingTarget, homingSpeed }) {
       this.active = true;
       this.x = x;
       this.y = y;
@@ -39,6 +39,8 @@
       this.isRocket = isRocket ?? false;
       this.explosionRadius = explosionRadius ?? 30;
       this.tailT = 0;
+      this.homingTarget = homingTarget || null;
+      this.homingSpeed = homingSpeed || 0;
     }
     update(dt, world) {
       if (!this.active) return null;
@@ -47,6 +49,28 @@
         this.active = false;
         return { reason: "timeout" };
       }
+      
+      if (this.homingTarget && this.homingTarget.active !== false && this.homingTarget.hp > 0) {
+        const tx = this.homingTarget.x - this.x;
+        const ty = this.homingTarget.y - this.y;
+        const dist = Math.hypot(tx, ty);
+        if (dist > 10) {
+          const speed = Math.hypot(this.vx, this.vy);
+          const dirX = this.vx / speed;
+          const dirY = this.vy / speed;
+          const tDirX = tx / dist;
+          const tDirY = ty / dist;
+          
+          // turn towards target
+          const newDirX = dirX + (tDirX - dirX) * this.homingSpeed * dt;
+          const newDirY = dirY + (tDirY - dirY) * this.homingSpeed * dt;
+          const newLen = Math.hypot(newDirX, newDirY);
+          
+          this.vx = (newDirX / newLen) * speed;
+          this.vy = (newDirY / newLen) * speed;
+        }
+      }
+      
       this.x += this.vx * dt;
       this.y += this.vy * dt;
       if (this.x < 0 || this.y < 0 || this.x > world.w || this.y > world.h) {
@@ -378,7 +402,13 @@
 
       this.rollCooldown = Math.max(0, this.rollCooldown - dt);
 
-      let currentSpeed = this.speed;
+      if (this.speedModTimer > 0) {
+        this.speedModTimer -= dt;
+      } else {
+        this.speedMod = 1.0;
+      }
+
+      let currentSpeed = this.speed * (this.speedMod || 1.0);
       let vx = 0;
       let vy = 0;
 
@@ -477,26 +507,32 @@
       if (!root.config?.infiniteAmmo) s.mag -= 1;
       s.cooldown = s.weapon.fireInterval;
       const baseAng = Math.atan2(this.aimY, this.aimX);
-      for (let i = 0; i < s.weapon.bulletsPerShot; i += 1) {
-        const spread = ((Math.random() * 2 - 1) * s.weapon.spreadDeg * Math.PI) / 180;
-        const ang = baseAng + spread;
-        const vx = Math.cos(ang) * s.weapon.bulletSpeed;
-        const vy = Math.sin(ang) * s.weapon.bulletSpeed;
-        const b = bullets.acquire();
-        b.init({
-          x: this.x + Math.cos(ang) * (this.r + SHOT_SPAWN_PAD),
-          y: this.y + Math.sin(ang) * (this.r + SHOT_SPAWN_PAD),
-          vx,
-          vy,
-          dmg: s.weapon.damage * this.damageMul,
-          ttl: 1.2,
-          fromPlayer: true,
-          r: s.weapon.bulletR,
-          color: s.weapon.bulletColor,
-          isRocket: s.weapon.isRocket,
-          explosionRadius: s.weapon.explosionRadius
-        });
+      
+      if (s.weapon.isGrenade || s.weapon.isThunder) {
+        emit.specialShoot(s.weapon.key);
+      } else {
+        for (let i = 0; i < s.weapon.bulletsPerShot; i += 1) {
+          const spread = ((Math.random() * 2 - 1) * s.weapon.spreadDeg * Math.PI) / 180;
+          const ang = baseAng + spread;
+          const vx = Math.cos(ang) * s.weapon.bulletSpeed;
+          const vy = Math.sin(ang) * s.weapon.bulletSpeed;
+          const b = bullets.acquire();
+          b.init({
+            x: this.x + Math.cos(ang) * (this.r + SHOT_SPAWN_PAD),
+            y: this.y + Math.sin(ang) * (this.r + SHOT_SPAWN_PAD),
+            vx,
+            vy,
+            dmg: s.weapon.damage * this.damageMul,
+            ttl: 1.2,
+            fromPlayer: true,
+            r: s.weapon.bulletR,
+            color: s.weapon.bulletColor,
+            isRocket: s.weapon.isRocket,
+            explosionRadius: s.weapon.explosionRadius
+          });
+        }
       }
+      
       emit.muzzle(this.x + this.aimX * (this.r + MUZZLE_PAD), this.y + this.aimY * (this.r + MUZZLE_PAD), this.aimX, this.aimY, s.weapon.key);
       audio.shot(s.weapon.key);
       shake.kick(s.weapon.kick);

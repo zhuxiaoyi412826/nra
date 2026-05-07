@@ -66,6 +66,22 @@
           death: { state: 'IDLE', timer: 0, phase: 0, particles: [], ashParticles: [], burnMark: null, swordDropped: false, droppedSword: null },
           readyToDie: false
         };
+      } else if (this.kind === "morphila") {
+        this.name = "幽影咒主·莫菲拉";
+        this.r = 40 * GAME_SCALE;
+        this.skillCd = { bind: 8.0, barrage: 6.0, domain: 14.0, ult: 45.0 };
+        this.skillReady = { bind: 0, barrage: 0, domain: 0, ult: 45.0 };
+        this.maxHp = Math.floor(1100 + level * 280);
+        this.mp = {
+          crystals: [{a:0}, {a:2.09}, {a:4.18}],
+          binds: [],
+          domain: { active: false, r: 0, timer: 0 },
+          ult: { state: 'IDLE', timer: 0 },
+          weakened: 0,
+          shield: 0,
+          marks: 0,
+          markTimer: 0
+        };
       } else {
         this.name = "灾厄核心";
         this.r = 46 * GAME_SCALE;
@@ -89,7 +105,12 @@
 
     hurt(dmg) {
       if (this.kind === "fire_giant" && this.fg && this.fg.death.state !== 'IDLE') return false;
-      this.hp -= dmg;
+      let finalDmg = dmg;
+      if (this.kind === "morphila" && this.mp) {
+        if (this.mp.shield > 0) finalDmg *= (1 - this.mp.shield);
+        if (this.mp.weakened > 0) finalDmg *= 1.4;
+      }
+      this.hp -= finalDmg;
       this.hitFlash = 0.1;
       if (this.hp <= 0) {
         this.hp = 0;
@@ -119,6 +140,7 @@
       if (pool.length === 0) {
         if (this.kind === "gunslinger") return "spray";
         if (this.kind === "fire_giant") return "sword";
+        if (this.kind === "morphila") return "barrage";
         return "barrage";
       }
       const w = [];
@@ -132,6 +154,11 @@
           if (k === "aoe") w.push(this.phase >= 2 ? 2 : 1);
           else if (k === "breath") w.push(2);
           else if (k === "ball") w.push(2);
+          else w.push(3);
+        } else if (this.kind === "morphila") {
+          if (k === "ult" && this.hp / this.maxHp <= 0.3) w.push(10); // High priority if ready
+          else if (k === "domain") w.push(2);
+          else if (k === "bind") w.push(2);
           else w.push(3);
         } else {
           if (k === "summon") w.push(this.phase >= 2 ? 2 : 1);
@@ -199,7 +226,33 @@
       });
     }
 
+    fireHoming(bullets, target, speed, dmg, r, color, spreadDeg = 0, homingSpeed = 2) {
+      const to = norm(target.x - this.x, target.y - this.y);
+      const base = Math.atan2(to.y, to.x);
+      const spread = (spreadDeg * Math.PI) / 180;
+      const a = base + rand(-spread, spread);
+      const b = bullets.acquire();
+      b.init({
+        x: this.x + Math.cos(a) * (this.r + 8),
+        y: this.y + Math.sin(a) * (this.r + 8),
+        vx: Math.cos(a) * speed,
+        vy: Math.sin(a) * speed,
+        dmg,
+        ttl: 3.0,
+        fromPlayer: false,
+        r,
+        color,
+        homingTarget: target,
+        homingSpeed
+      });
+      b.morphilaBarrage = true;
+    }
+
     update(dt, player, bullets, spawnMinions, emit, audio, difficulty, isNight, shake) {
+      if (this.kind === "morphila") {
+        this.updateMorphila(dt, player, bullets, spawnMinions, emit, audio, difficulty, isNight, shake);
+        return;
+      }
       if (this.kind === "gunslinger") {
         this.updateGunslinger(dt, player, bullets, spawnMinions, emit, audio, difficulty, isNight, shake);
         return;
@@ -213,7 +266,7 @@
       this.hitFlash = Math.max(0, this.hitFlash - dt);
       this.contactCd = Math.max(0, this.contactCd - dt);
       const hpPct = this.hp / this.maxHp;
-      this.phase = hpPct <= 0.5 ? 2 : 1;
+      this.phase = hpPct <= 0.3 ? 2 : 1;
 
       for (const k of Object.keys(this.skillReady)) this.skillReady[k] = Math.max(0, this.skillReady[k] - dt);
 
@@ -797,8 +850,188 @@
         }
       }
     }
+    updateMorphila(dt, player, bullets, spawnMinions, emit, audio, difficulty, isNight, shake) {
+      if (!this.active) return;
+      const mp = this.mp;
+      const ms = dt * 1000;
+      this.t += dt;
+      this.hitFlash = Math.max(0, this.hitFlash - dt);
+      this.contactCd = Math.max(0, this.contactCd - dt);
+      const hpPct = this.hp / this.maxHp;
+      this.phase = hpPct <= 0.3 ? 2 : 1;
+
+      // Crystals rotation
+      for (let i=0; i<3; i++) {
+        mp.crystals[i].a += dt * (hpPct <= 0.3 ? 3 : 1.5);
+      }
+      
+      mp.weakened = Math.max(0, mp.weakened - dt);
+      mp.markTimer = Math.max(0, mp.markTimer - dt);
+      if (mp.markTimer <= 0) mp.marks = 0; // reset marks if no hits
+
+      for (const k of Object.keys(this.skillReady)) {
+        if (k === "ult" && hpPct > 0.3) continue; // Ult locked until 30% HP
+        this.skillReady[k] = Math.max(0, this.skillReady[k] - dt);
+      }
+
+      const toP = { x: player.x - this.x, y: player.y - this.y };
+      const dist = Math.hypot(toP.x, toP.y);
+      const dir = dist > 1e-6 ? { x: toP.x / dist, y: toP.y / dist } : { x: 0, y: 0 };
+
+      let vx = 0, vy = 0;
+      
+      // Movement
+      if (this.skill === null) {
+        const baseSpeed = 45 + difficulty * 5;
+        const nightBoost = isNight ? 1.1 : 1.0;
+        const keep = dist > 400 ? 1 : dist < 200 ? -0.8 : (Math.sin(this.t) * 0.5); // kite player
+        vx = dir.x * baseSpeed * keep * nightBoost;
+        vy = dir.y * baseSpeed * keep * nightBoost;
+        this.x += vx * dt;
+        this.y += vy * dt;
+      }
+      
+      if (Math.abs(vx) > 0.1 || Math.abs(vy) > 0.1) {
+        this.walkAnim += dt * 8;
+      } else {
+        this.walkAnim = 0;
+      }
+
+      this.x = clamp(this.x, this.r, WORLD.w - this.r);
+      this.y = clamp(this.y, this.r, WORLD.h - this.r);
+
+      // Contact dmg
+      if (dist < this.r + player.r + 6 * GAME_SCALE && this.contactCd <= 0) {
+        this.contactCd = 1.0;
+        player.takeDamage(10 + difficulty * 2, { x: dir.x, y: dir.y }, audio);
+        if (emit) emit.hurtPlayer(player.x, player.y);
+      }
+
+      // Domain Logic
+      if (mp.domain.active) {
+        mp.domain.timer -= dt;
+        mp.domain.r = Math.min(120 * GAME_SCALE, mp.domain.r + 20 * GAME_SCALE * dt); // max 12m (assume 10px = 1m -> 120px)
+        
+        const dP = Math.hypot(player.x - mp.domain.x, player.y - mp.domain.y);
+        if (dP <= mp.domain.r) {
+           // DoT and slow handled in gameplay if needed, but we can do it here
+           if (this.t % 0.5 < dt) {
+             player.takeDamage((20 + difficulty * 3)*0.5, {x:0, y:0});
+             // We can just slow player by modifying speed, but we don't have direct access.
+             // We'll just deal damage here.
+           }
+        }
+        
+        if (mp.domain.timer <= 0) {
+          mp.domain.active = false;
+          mp.shield = 0;
+          if (shake) shake.kick(3);
+          // Explosion at end
+          if (dP <= mp.domain.r) {
+            player.takeDamage(player.hp * 0.25, {x:0, y:0}, audio); // 25% current HP
+            if (emit) emit.hurtPlayer(player.x, player.y);
+          }
+        }
+      }
+
+      // Binds Logic
+      for (let i = mp.binds.length - 1; i >= 0; i--) {
+        const b = mp.binds[i];
+        b.timer -= dt;
+        if (b.timer <= 0) {
+          mp.binds.splice(i, 1);
+          continue;
+        }
+        // If player in bind
+        const dP = Math.hypot(player.x - b.x, player.y - b.y);
+        if (dP <= b.r) {
+          if (this.t % 0.5 < dt) {
+            player.takeDamage((12 + difficulty * 2)*0.5, {x:0,y:0});
+          }
+          // Roots player (forces velocity 0 in gameplay? We can set player position)
+          if (player.rollTimer <= 0) {
+            player.x += (b.x - player.x) * 0.1;
+            player.y += (b.y - player.y) * 0.1;
+          }
+        }
+      }
+
+      // Skill Picking
+      if (!this.skill) {
+        this.nextSkill -= dt;
+        if (this.nextSkill <= 0) {
+          this.beginSkill(this.pickSkill(), audio);
+          this.nextSkill = 999;
+        }
+        return;
+      }
+
+      this.skillT += dt;
+      const bossDmg = 15 + difficulty * 3;
+
+      if (this.skill === "bind") {
+        if (this.skillT >= 0.5 && this.skillStep === 0) {
+          this.skillStep = 1;
+          if (audio) audio.bossSkill();
+          // Create bind at player pos
+          mp.binds.push({ x: player.x, y: player.y, r: 35 * GAME_SCALE, timer: 5.0 });
+        }
+        if (this.skillT >= 1.0) {
+          this.skill = null;
+          this.nextSkill = 1.0;
+        }
+      } else if (this.skill === "barrage") {
+        if (this.skillT >= 0.4 && this.skillStep === 0) {
+          this.skillStep = 1;
+          if (audio) audio.bossSkill();
+          const count = hpPct < 0.5 ? 15 : 10;
+          for (let i=0; i<count; i++) {
+            const speed = 300 + Math.random()*150;
+            const tracking = hpPct < 0.5 ? 4 : 2;
+            this.fireHoming(bullets, player, speed, bossDmg, 5, "#a48bff", 45, tracking);
+          }
+        }
+        if (this.skillT >= 1.2) {
+          this.skill = null;
+          this.nextSkill = 1.0;
+        }
+      } else if (this.skill === "domain") {
+        if (this.skillT >= 0.5 && this.skillStep === 0) {
+          this.skillStep = 1;
+          if (audio) audio.bossSkill();
+          mp.domain = { active: true, x: this.x, y: this.y, r: 80 * GAME_SCALE, timer: 6.0 };
+          mp.shield = 0.3; // 30% reduction
+        }
+        if (this.skillT >= 1.0) {
+          this.skill = null;
+          this.nextSkill = 0.5;
+        }
+      } else if (this.skill === "ult") {
+        if (this.skillStep === 0) {
+          this.skillStep = 1;
+          if (audio) audio.bossSkill();
+        }
+        if (this.skillT >= 3.0 && this.skillStep === 1) {
+          this.skillStep = 2;
+          if (shake) shake.kick(8);
+          // Huge AoE
+          const dP = Math.hypot(player.x - this.x, player.y - this.y);
+          if (dP <= 400 * GAME_SCALE) {
+            player.takeDamage(bossDmg * 5, {x:dir.x, y:dir.y}, audio);
+            if (player.hp / player.maxHp < 0.4) {
+              player.takeDamage(player.hp * 0.3, {x:0, y:0}, audio);
+            }
+            if (emit) emit.hurtPlayer(player.x, player.y);
+          }
+          mp.weakened = 5.0;
+        }
+        if (this.skillT >= 4.0) {
+          this.skill = null;
+          this.nextSkill = 2.0;
+        }
+      }
+    }
   }
 
-  root.entities = root.entities || {};
   root.entities.Boss = Boss;
 })();

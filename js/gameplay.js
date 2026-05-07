@@ -256,7 +256,7 @@
           if (died) {
             this.kills += 1;
             this.audio.enemyDie(e.elite);
-            this.killEnemy(e.x, e.y, e.elite);
+            this.killEnemy(e.x, e.y, e.elite, e.type);
             this.tryDrop(e.x, e.y, e.elite);
             this.progressKillDrops(e.x, e.y, e.elite);
           } else {
@@ -366,9 +366,12 @@
       this.spawnBurst(x, y, { count: 8, speed: 220, spread: 1.6, ttlA: 0.08, ttlB: 0.18, sizeA: 1, sizeB: 3, color: "#ff5b6e", alpha: 0.9, drag: 4.4 });
       this.spawnBurst(x, y, { count: 6, speed: 180, spread: 1.4, ttlA: 0.06, ttlB: 0.14, sizeA: 1, sizeB: 2, color: "#ffffff", alpha: 0.7, drag: 5.2 });
     }
-    killEnemy(x, y, elite) {
+    killEnemy(x, y, elite, type) {
       this.spawnBurst(x, y, { count: elite ? 26 : 18, speed: elite ? 360 : 300, spread: elite ? 2.8 : 2.4, ttlA: 0.12, ttlB: 0.35, sizeA: 1, sizeB: 4, color: elite ? "#ffd36f" : "#ff5b6e", alpha: 0.95, drag: 3.4, gravity: 220 });
       this.spawnBurst(x, y, { count: 10, speed: 240, spread: 2.2, ttlA: 0.1, ttlB: 0.24, sizeA: 1, sizeB: 3, color: "#c7d2fe", alpha: 0.65, drag: 3.9 });
+      if (WORLD.details) {
+        WORLD.details.push({ x, y, type: "gore", color: root.render.ENEMY_COLORS ? (root.render.ENEMY_COLORS[type]?.shadow || "#8b2a2a") : "#8b2a2a", size: GAME_SCALE * (elite ? 12 : 7), ttl: 20 });
+      }
     }
     explodeBarrel(x, y) {
       this.audio.explosion(true);
@@ -401,7 +404,7 @@
           }
           if (e.hp <= 0 && !e.dead) {
             e.dead = true;
-            this.killEnemy(e.x, e.y, e.elite);
+            this.killEnemy(e.x, e.y, e.elite, e.type);
             this.progressKillDrops(e.elite);
             this.kills += 1;
             this.coins += e.elite ? 4 : 1;
@@ -451,6 +454,8 @@
       }
     }
     hurtPlayer(x, y) {
+      const isInvuln = this.player.invuln > 0 || (root.config && root.config.invincible);
+      if (isInvuln) return;
       this.spawnBurst(x, y, { count: 14, speed: 220, spread: 2.4, ttlA: 0.12, ttlB: 0.28, sizeA: 1, sizeB: 3, color: "#ff7b7b", alpha: 0.75, drag: 3.6, gravity: 180 });
     }
     rollWeaponDropKey() {
@@ -642,6 +647,20 @@
       }
     }
     update(dt, input, shake, audio, tNow) {
+      // Cleanup old gore details
+      if (WORLD.details) {
+        for (let i = WORLD.details.length - 1; i >= 0; i--) {
+          const d = WORLD.details[i];
+          if (d.ttl !== undefined) {
+            d.ttl -= dt;
+            d.opacity = Math.min(1, d.ttl / 2); // Fade out in the last 2 seconds
+            if (d.ttl <= 0) {
+              WORLD.details.splice(i, 1);
+            }
+          }
+        }
+      }
+
       if (this.state !== "playing") return;
       this.currentShake = shake;
       this.t += dt;
@@ -679,7 +698,22 @@
       this.player.fireHeld = input.fireHeld;
       const emit = {
         muzzle: (x, y, ax, ay, weaponKey) => this.muzzle(x, y, ax, ay, weaponKey),
-        spawnBurst: (x, y, cfg) => this.spawnBurst(x, y, cfg)
+        spawnBurst: (x, y, cfg) => this.spawnBurst(x, y, cfg),
+        specialShoot: (kind) => {
+          // If kind is grenade or thunder_gun
+          if (kind === "grenade") {
+            const ax = this.player.aimX || 1;
+            const ay = this.player.aimY || 0;
+            const spawnOff = (this.player?.r ?? 16) + 10 * GAME_SCALE;
+            const speed = 520;
+            const g = this.specials.acquire();
+            g.init("grenade", this.player.x + ax * spawnOff, this.player.y + ay * spawnOff, ax * speed, ay * speed, 1.2);
+            this.audio.grenade();
+          } else if (kind === "thunder_gun") {
+            this.thunder = { t: 0, ttl: 1.6, next: 0, interval: 0.18 };
+            this.audio.thunder();
+          }
+        }
       };
       this.player.move(dt, input, WORLD, night, emit);
       this.player.update(
@@ -824,7 +858,7 @@
               if (died) {
                 this.kills += 1;
                 audio.enemyDie(target.enemy.elite);
-                this.killEnemy(target.enemy.x, target.enemy.y, target.enemy.elite);
+                this.killEnemy(target.enemy.x, target.enemy.y, target.enemy.elite, target.enemy.type);
                 this.tryDrop(target.enemy.x, target.enemy.y, target.enemy.elite);
                 this.progressKillDrops(target.enemy.x, target.enemy.y, target.enemy.elite);
               }
@@ -858,7 +892,7 @@
           {
             muzzle: (x, y, ax, ay, weaponKey) => this.muzzle(x, y, ax, ay, weaponKey),
             hitEnemy: (x, y) => this.hitEnemy(x, y),
-            killEnemy: (x, y, elite) => this.killEnemy(x, y, elite),
+            killEnemy: (x, y, elite, type) => this.killEnemy(x, y, elite, type),
             hurtPlayer: (x, y) => this.hurtPlayer(x, y),
           },
           audio,
@@ -912,7 +946,7 @@
               if (died) {
                 this.kills += 1;
                 audio.enemyDie(e.elite);
-                this.killEnemy(e.x, e.y, e.elite);
+                this.killEnemy(e.x, e.y, e.elite, e.type);
                 this.tryDrop(e.x, e.y, e.elite);
                 this.progressKillDrops(e.x, e.y, e.elite);
               }
@@ -927,9 +961,22 @@
         const d = Math.hypot(b.x - this.player.x, b.y - this.player.y);
         if (d <= b.r + this.player.r) {
           b.active = false;
-          this.player.takeDamage(b.dmg, norm(b.vx, b.vy), audio);
-          shake.kick(3.2);
-          this.hurtPlayer(this.player.x, this.player.y);
+          const isInvuln = this.player.invuln > 0 || (root.config && root.config.invincible);
+          if (!isInvuln) {
+            this.player.takeDamage(b.dmg, norm(b.vx, b.vy), audio);
+            if (b.morphilaBarrage && this.boss && this.boss.kind === "morphila") {
+               this.boss.mp.marks++;
+               this.boss.mp.markTimer = 2.0;
+               if (this.boss.mp.marks >= 3) {
+                  this.boss.mp.marks = 0;
+                  this.player.takeDamage(35, {x:0, y:0}, audio);
+                  this.player.speedMod = 0.7;
+                  this.player.speedModTimer = 3.0;
+               }
+            }
+            shake.kick(3.2);
+            this.hurtPlayer(this.player.x, this.player.y);
+          }
         }
       }
 

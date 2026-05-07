@@ -32,9 +32,6 @@
   const elTxtKills = document.getElementById("txt-kills");
   const elTxtCoins = document.getElementById("txt-coins");
   const elTxtGems = document.getElementById("txt-gems");
-  const elTxtSpQ = document.getElementById("txt-sp-q");
-  const elTxtSpE = document.getElementById("txt-sp-e");
-  const elTxtSpR = document.getElementById("txt-sp-r");
   const elTxtMission = document.getElementById("txt-mission");
   const elTxtMissionProgress = document.getElementById("txt-mission-progress");
   const elTxtTime = document.getElementById("txt-time");
@@ -405,11 +402,6 @@
     else elTxtMissionProgress.textContent = `${fmtTime(game.t)}/${fmtTime(game.mission.target)}`;
     elTxtTime.textContent = fmtTime(game.t);
     elTxtPhase.textContent = game.isNight() ? "夜晚" : "白天";
-
-    const fmtCd = (v) => (v && v > 0 ? `${v.toFixed(1)}s` : "就绪");
-    if (elTxtSpQ && game.special?.grenade) elTxtSpQ.textContent = fmtCd(game.special.grenade.cd);
-    if (elTxtSpE && game.special?.rocket) elTxtSpE.textContent = fmtCd(game.special.rocket.cd);
-    if (elTxtSpR && game.special?.thunder) elTxtSpR.textContent = fmtCd(game.special.thunder.cd);
 
     renderBuffs(game);
 

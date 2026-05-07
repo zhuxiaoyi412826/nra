@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<title>Pixi.js Spine 骨骼动画 直接运行版</title>
+<style>
+body{margin:0;background:#222;display:flex;justify-content:center;align-items:center;height:100vh;}
+canvas{border:1px solid #444;}
+</style>
+</head>
+<body>
+
+<!-- 引入 Pixi.js 8 -->
+<script src="https://cdn.jsdelivr.net/npm/pixi.js@8.3.0/dist/pixi.min.js"></script>
+<!-- 引入 Spine 4.1 运行时 -->
+<script src="https://unpkg.com/@esotericsoftware/spine-pixi-v8@4.2.55/dist/iife/spine-pixi-v8.js"></script>
+
+<script type="module">
+// 1. 创建 Pixi 应用
+const app = new PIXI.Application();
+await app.init({
+  width: 800,
+  height: 600,
+  backgroundColor: 0x181818
+});
+document.body.appendChild(app.canvas);
+
+// 2. 加载官方现成 Spine 资源
+async function run() {
+  PIXI.Assets.add({ alias: 'spineboy-skel', src: 'https://esotericsoftware.com/files/spineboy/spineboy-pro.skel' });
+  PIXI.Assets.add({ alias: 'spineboy-atlas', src: 'https://esotericsoftware.com/files/spineboy/spineboy-pma.atlas' });
+  
+  // 加载 Spine 三件套
+  const assets = await PIXI.Assets.load(['spineboy-skel', 'spineboy-atlas']);
+
+  // 3. 创建 Spine 骨骼角色
+  // Pixi8 和新版官方 Spine 插件的实例化是 from(...)
+  const spineBoy = spine.Spine.from(assets['spineboy-skel'], assets['spineboy-atlas']);
+
+  // 位置、缩放
+  spineBoy.x = app.screen.width / 2;
+  spineBoy.y = app.screen.height - 80;
+  spineBoy.scale.set(0.45);
+
+  // 加到舞台
+  app.stage.addChild(spineBoy);
+
+  // 4. 播放骨骼动画
+  const animState = spineBoy.state;
+  // 官方插件里的过渡配置在 data 下
+  animState.data.defaultMix = 0.3;
+
+  // 先播 待机 idle 循环
+  animState.setAnimation(0, 'idle', true);
+
+  // 2秒后平滑切换到 跑步 run
+  setTimeout(() => {
+    animState.setAnimation(0, 'run', true);
+  }, 2000);
+
+  // 6秒后切回待机
+  setTimeout(() => {
+    animState.setAnimation(0, 'idle', true);
+  }, 6000);
+}
+
+run();
+</script>
+
+</body>
+</html>

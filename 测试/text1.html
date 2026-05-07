@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>Phaser 火焰巨人BOSS 最终修复版</title>
+    <script src="https://cdn.jsdelivr.net/npm/phaser@3.80.1/dist/phaser.min.js"></script>
+    <style>
+        body {
+            background: #111;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            margin: 20px 0;
+        }
+        .tips {
+            color: #ff9900;
+            font-size: 16px;
+            margin-bottom: 10px;
+        }
+        .ctrl {
+            margin-top: 15px;
+        }
+        button {
+            padding: 10px 25px;
+            font-size: 16px;
+            margin: 0 8px;
+            background: #ff4400;
+            color: #fff;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+        }
+        button:hover {
+            background: #ff7722;
+        }
+    </style>
+</head>
+<body>
+<div class="tips">← → 方向键行走 | 空格：发怒变大 | 回车：喷火 | 按钮：击退抖动</div>
+<div id="gameContainer"></div>
+<div class="ctrl">
+    <button id="btnLeft">向左走</button>
+    <button id="btnStop">停止</button>
+    <button id="btnRight">向右走</button>
+    <button id="btnHit">击退抖动</button>
+</div>
+
+<script>
+class MainScene extends Phaser.Scene {
+    constructor() {
+        super('MainScene');
+        this.bossX = 450;
+        this.bossY = 300;
+        this.speed = 3;
+        this.moveDir = 0;
+        this.walkTime = 0;
+        this.isAngry = false;
+        this.hp = 100;
+        this.maxHp = 100;
+        this.bossScale = 1;
+    }
+
+    preload() {
+        // Use a 1x1 white pixel base64 image instead of a bad/corrupted one to avoid WebGL texture errors
+        this.load.image('dot', 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=');
+    }
+
+    create() {
+        this.gfx = this.add.graphics();
+        this.shadow = this.add.ellipse(this.bossX, this.bossY + 200, 160, 40, 0xff5500).setAlpha(0.3);
+        this.hpBg = this.add.rectangle(this.bossX, this.bossY - 160, 160, 18, 0x333333);
+        this.hpRect = this.add.rectangle(this.bossX - 78, this.bossY - 160, 156, 14, 0xff3300).setOrigin(0, 0.5);
+
+        this.cursors = this.input.keyboard.createCursorKeys();
+        this.space = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE);
+        this.enter = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.ENTER);
+
+        document.getElementById('btnLeft').onclick = () => this.moveDir = -1;
+        document.getElementById('btnStop').onclick = () => this.moveDir = 0;
+        document.getElementById('btnRight').onclick = () => this.moveDir = 1;
+        document.getElementById('btnHit').onclick = () => this.hitBoss();
+    }
+
+    hitBoss() {
+        this.cameras.main.shake(200, 0.03);
+        this.hp = Math.max(0, this.hp - 10);
+    }
+
+    angryBoss() {
+        if (this.isAngry) return;
+        this.isAngry = true;
+        this.tweens.add({
+            targets: this,
+            bossScale: 1.3,
+            duration: 250,
+            yoyo: true,
+            hold: 700,
+            onComplete: () => { this.isAngry = false; this.bossScale = 1; }
+        });
+    }
+
+    fireSpray() {
+        const emitter = this.add.particles(this.bossX + 60, this.bossY - 50, 'dot', {
+            speed: { min: 150, max: 300 },
+            angle: { min: -10, max: 20 },
+            scale: { start: 1, end: 0 },
+            tint: [0xff9900, 0xff3300],
+            lifespan: 700,
+            blendMode: 'ADD'
+        });
+        emitter.explode(30);
+        this.time.delayedCall(1000, () => emitter.destroy());
+    }
+
+    update(time, delta) {
+        if (this.cursors.left.isDown) this.moveDir = -1;
+        else if (this.cursors.right.isDown) this.moveDir = 1;
+
+        if (Phaser.Input.Keyboard.JustUp(this.cursors.left) || Phaser.Input.Keyboard.JustUp(this.cursors.right)) {
+            this.moveDir = 0;
+        }
+
+        if (Phaser.Input.Keyboard.JustDown(this.space)) this.angryBoss();
+        if (Phaser.Input.Keyboard.JustDown(this.enter)) this.fireSpray();
+
+        this.bossX += this.moveDir * this.speed;
+        this.bossX = Phaser.Math.Clamp(this.bossX, 140, 760);
+        this.walkTime += delta * 0.005;
+
+        const wave = Math.sin(this.walkTime);
+        const bodyUp = Math.abs(wave) * 7;
+        const armSwing = wave * 16;
+        const legMove = wave * 20;
+        const finalScale = this.bossScale;
+
+        this.shadow.setPosition(this.bossX, this.bossY + 200);
+        this.shadow.setScale(finalScale);
+        this.hpBg.setPosition(this.bossX, this.bossY - 160 * finalScale);
+        this.hpRect.setPosition(this.bossX - 78, this.bossY - 160 * finalScale);
+        this.hpRect.width = 156 * (this.hp / this.maxHp);
+
+        this.gfx.clear();
+        this.drawGiant(this.bossX, this.bossY - bodyUp, finalScale, armSwing, legMove);
+    }
+
+    drawGiant(x, y, scale, armSwing, legMove) {
+        const g = this.gfx;
+        const ox = x;
+        const oy = y;
+
+        const headColor = this.isAngry ? 0xff5500 : 0xff7722;
+        const bodyColor = this.isAngry ? 0xff2200 : 0xb32400;
+        const eyeColor = this.isAngry ? 0xff0000 : 0x000000;
+
+        g.fillStyle(headColor);
+        g.fillCircle(ox, oy - 130 * scale, 35 * scale);
+
+        g.fillStyle(eyeColor);
+        g.fillCircle(ox - 12 * scale, oy - 138 * scale, 5 * scale);
+        g.fillCircle(ox + 12 * scale, oy - 138 * scale, 5 * scale);
+
+        g.lineStyle(2 * scale, 0x000000);
+        g.beginPath();
+        g.arc(ox, oy - 122 * scale, 12 * scale, 0.2, Math.PI - 0.2);
+        g.strokePath();
+
+        g.fillStyle(bodyColor);
+        g.fillRect(ox - 10 * scale, oy - 95 * scale, 20 * scale, 25 * scale);
+
+        g.fillStyle(bodyColor);
+        g.fillRect(ox - 35 * scale, oy - 70 * scale, 70 * scale, 80 * scale);
+        g.fillStyle(0xff4400);
+        g.fillRect(ox - 25 * scale, oy - 50 * scale, 50 * scale, 15 * scale);
+
+        const lx = ox - 35 * scale;
+        const ly = oy - 60 * scale;
+        g.save();
+        g.translateCanvas(lx, ly);
+        g.rotateCanvas(Phaser.Math.DegToRad(armSwing));
+        g.fillStyle(0xc23000);
+        g.fillRect(-8 * scale, 0, 16 * scale, 90 * scale);
+        g.restore();
+
+        const rx = ox + 35 * scale;
+        const ry = oy - 60 * scale;
+        g.save();
+        g.translateCanvas(rx, ry);
+        g.rotateCanvas(Phaser.Math.DegToRad(-armSwing));
+        g.fillStyle(0xc23000);
+        g.fillRect(-8 * scale, 0, 16 * scale, 90 * scale);
+        g.restore();
+
+        g.fillStyle(bodyColor);
+        g.fillRect(ox - 22 * scale, oy + 10 * scale, 18 * scale, (100 + legMove) * scale);
+        g.fillRect(ox + 4 * scale, oy + 10 * scale, 18 * scale, (100 - legMove) * scale);
+    }
+}
+
+const config = {
+    type: Phaser.AUTO,
+    parent: 'gameContainer',
+    width: 900,
+    height: 600,
+    backgroundColor: '#000000',
+    scene: MainScene
+};
+
+new Phaser.Game(config);
+</script>
+</body>
+</html>
