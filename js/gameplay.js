@@ -677,14 +677,18 @@
       }
 
       this.player.fireHeld = input.fireHeld;
-      this.player.move(dt, input, WORLD, night);
+      const emit = {
+        muzzle: (x, y, ax, ay, weaponKey) => this.muzzle(x, y, ax, ay, weaponKey),
+        spawnBurst: (x, y, cfg) => this.spawnBurst(x, y, cfg)
+      };
+      this.player.move(dt, input, WORLD, night, emit);
       this.player.update(
         dt,
         this.bullets,
         WORLD,
         shake,
         input,
-        { muzzle: (x, y, ax, ay, weaponKey) => this.muzzle(x, y, ax, ay, weaponKey) },
+        emit,
         audio,
         tNow
       );

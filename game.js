@@ -71,6 +71,7 @@
       this.specialRPressed = false;
       this.pausePressed = false;
       this.shopPressed = false;
+      this.rollPressed = false;
       this.selectSlot = null;
       this.equipWeaponKey = null;
       this.joyActive = false;
@@ -233,6 +234,7 @@
     if (e.code === "Digit4") input.selectSlot = 3;
     if (e.code === "Digit5") input.selectSlot = 4;
     if (e.code === "Digit9") input.equipWeaponKey = "hmg";
+    if (e.code === "Space" || e.code === "ShiftLeft") input.rollPressed = true;
     if (e.code === "KeyB") input.shopPressed = true;
     if (e.code === "Escape") input.pausePressed = true;
     input.recomputeMove();

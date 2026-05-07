@@ -350,6 +350,9 @@
       this.fireHeld = false;
       this.invuln = 0;
       this.walkAnim = 0;
+      this.rollTimer = 0;
+      this.rollCooldown = 0;
+      this.rollDir = { x: 0, y: 0 };
     }
     get slot() {
       return this.inv[this.activeSlot];
@@ -360,18 +363,50 @@
       this.aimX = n.x;
       this.aimY = n.y;
     }
-    move(dt, input, world, isNight) {
-      const mv = norm(input.moveX, input.moveY);
-      const slow = isNight ? 0.98 : 1.0;
-      this.x += mv.x * this.speed * slow * dt;
-      this.y += mv.y * this.speed * slow * dt;
+    move(dt, input, world, isNight, emit) {
+      if (input.rollPressed && this.rollCooldown <= 0 && this.rollTimer <= 0) {
+        const mv = norm(input.moveX, input.moveY);
+        if (mv.x !== 0 || mv.y !== 0) {
+          this.rollDir = mv;
+        } else {
+          this.rollDir = { x: this.aimX, y: this.aimY };
+        }
+        this.rollTimer = 0.35; // 0.35 seconds roll duration
+        this.rollCooldown = 1.0; // 1 second cooldown
+        this.invuln = 0.4; // I-frames during roll
+      }
+
+      this.rollCooldown = Math.max(0, this.rollCooldown - dt);
+
+      let currentSpeed = this.speed;
+      let vx = 0;
+      let vy = 0;
+
+      if (this.rollTimer > 0) {
+        this.rollTimer -= dt;
+        currentSpeed = this.speed * 2.2; // Fast roll
+        vx = this.rollDir.x * currentSpeed;
+        vy = this.rollDir.y * currentSpeed;
+        
+        // Spawn dash trail particles
+        if (emit && Math.random() < 0.4) {
+          emit.muzzle(this.x, this.y, -this.rollDir.x, -this.rollDir.y, "player");
+        }
+      } else {
+        const slow = isNight ? 0.98 : 1.0;
+        const mv = norm(input.moveX, input.moveY);
+        vx = mv.x * currentSpeed * slow;
+        vy = mv.y * currentSpeed * slow;
+      }
+
+      this.x += vx * dt;
+      this.y += vy * dt;
       this.x = clamp(this.x, this.r, world.w - this.r);
       this.y = clamp(this.y, this.r, world.h - this.r);
       
-      if (Math.abs(mv.x) > 0.1 || Math.abs(mv.y) > 0.1) {
-        this.walkAnim += dt * 15;
+      if (Math.abs(vx) > 0.1 || Math.abs(vy) > 0.1) {
+        this.walkAnim += dt * (this.rollTimer > 0 ? 25 : 15);
       } else {
-        // Reset walk animation smoothly or just 0
         this.walkAnim = 0;
       }
       
