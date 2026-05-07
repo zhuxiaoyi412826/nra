@@ -36,6 +36,7 @@
       };
       this.dashVec = { x: 0, y: 0 };
       this.dashSpeed = 0;
+      this.walkAnim = 0;
     }
 
     init(level = 1, kind = "core") {
@@ -83,6 +84,7 @@
       this.skillStep = 0;
       this.dashVec = { x: 0, y: 0 };
       this.dashSpeed = 0;
+      this.walkAnim = 0;
     }
 
     hurt(dmg) {
@@ -221,10 +223,22 @@
 
       const baseSpeed = 54 + difficulty * 7;
       const nightBoost = isNight ? 1.1 : 1.0;
+      let vx = 0, vy = 0;
       if (!this.skill) {
         const keep = dist > 380 ? 1 : dist < 220 ? -1 : 0.2;
-        this.x += dir.x * baseSpeed * keep * dt * nightBoost;
-        this.y += dir.y * baseSpeed * keep * dt * nightBoost;
+        vx = dir.x * baseSpeed * keep * nightBoost;
+        vy = dir.y * baseSpeed * keep * nightBoost;
+        this.x += vx * dt;
+        this.y += vy * dt;
+      } else if (this.skill === "dash" && this.skillStep >= 1) {
+        vx = this.dashVec.x * this.dashSpeed;
+        vy = this.dashVec.y * this.dashSpeed;
+      }
+      
+      if (Math.abs(vx) > 0.1 || Math.abs(vy) > 0.1) {
+        this.walkAnim += dt * 10;
+      } else {
+        this.walkAnim = 0;
       }
 
       this.x = clamp(this.x, this.r, WORLD.w - this.r);
@@ -426,8 +440,16 @@
 
       if (fs.state === 'IDLE' && gs.state === 'IDLE' && fb.state === 'IDLE') {
         const keep = dist > 260 ? 1 : dist < 120 ? -0.5 : 0.8;
-        this.x += dir.x * baseSpeed * keep * dt * nightBoost;
-        this.y += dir.y * baseSpeed * keep * dt * nightBoost;
+        const vx = dir.x * baseSpeed * keep * nightBoost;
+        const vy = dir.y * baseSpeed * keep * nightBoost;
+        this.x += vx * dt;
+        this.y += vy * dt;
+        
+        if (Math.abs(vx) > 0.1 || Math.abs(vy) > 0.1) {
+          this.walkAnim += dt * 8;
+        } else {
+          this.walkAnim = 0;
+        }
         
         this.nextSkill -= dt;
         if (this.nextSkill <= 0) {
@@ -639,22 +661,33 @@
       const nightBoost = isNight ? 1.08 : 1.0;
       
       // Moving Logic (Cover movement if not casting, normal moving otherwise)
+      let vx = 0, vy = 0;
       if (!this.skill) {
         // Simple evasive cover movement: strafe sideways
         const strafe = Math.sin(this.t * 1.5) * 1.2;
         const targetDir = { x: dir.x * -0.2 + dir.y * strafe, y: dir.y * -0.2 - dir.x * strafe };
         const keep = dist > 520 ? 1 : dist < 330 ? -1 : 0.4;
         
-        this.x += (dir.x * keep + targetDir.x) * baseSpeed * dt * nightBoost;
-        this.y += (dir.y * keep + targetDir.y) * baseSpeed * dt * nightBoost;
+        vx = (dir.x * keep + targetDir.x) * baseSpeed * nightBoost;
+        vy = (dir.y * keep + targetDir.y) * baseSpeed * nightBoost;
+        this.x += vx * dt;
+        this.y += vy * dt;
       } else if (this.skill === "dash") {
         const speed = baseSpeed * (this.phase >= 2 ? 6.5 : 5);
         // Ensure dashDir exists before applying movement
         if (this.dashDir) {
-          this.x += this.dashDir.x * speed * dt;
-          this.y += this.dashDir.y * speed * dt;
+          vx = this.dashDir.x * speed;
+          vy = this.dashDir.y * speed;
+          this.x += vx * dt;
+          this.y += vy * dt;
           if (emit && Math.random() < 0.4) emit.muzzle(this.x, this.y, -this.dashDir.x, -this.dashDir.y, "player");
         }
+      }
+
+      if (Math.abs(vx) > 0.1 || Math.abs(vy) > 0.1) {
+        this.walkAnim += dt * 10;
+      } else {
+        this.walkAnim = 0;
       }
 
       this.x = clamp(this.x, this.r, WORLD.w - this.r);

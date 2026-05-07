@@ -131,23 +131,19 @@
       ctx.imageSmoothingEnabled = false;
       ctx.clearRect(0, 0, 32, 32);
       if (bulky) {
-        pxRect(ctx, 9, 8, 14, 14, body);
-        pxRect(ctx, 11, 5, 10, 4, body);
-        pxRect(ctx, 8, 13, 3, 6, body);
-        pxRect(ctx, 21, 13, 3, 6, body);
+        pxRect(ctx, 9, 8, 14, 14, body); // Body
+        pxRect(ctx, 11, 5, 10, 4, body); // Head
+        // Removed static legs and arms for dynamic animation
       } else {
-        pxRect(ctx, 12, 7, 8, 7, body);
-        pxRect(ctx, 11, 14, 10, 9, body);
-        pxRect(ctx, 10, 16, 3, 6, body);
-        pxRect(ctx, 19, 16, 3, 6, body);
-        pxRect(ctx, 8, 14, 3, 4, body);
-        pxRect(ctx, 21, 14, 3, 4, body);
+        pxRect(ctx, 12, 7, 8, 7, body); // Head
+        pxRect(ctx, 11, 14, 10, 9, body); // Body
+        // Removed static legs and arms for dynamic animation
       }
       pxRect(ctx, lean ? 12 : 11, 10, 2, 2, shadow);
       pxRect(ctx, lean ? 18 : 19, 10, 2, 2, shadow);
       pxRect(ctx, 14, 12, 4, 2, shadow);
       ctx.fillStyle = "rgba(0,0,0,0.28)";
-      ctx.fillRect(12, 24, 8, 2);
+      ctx.fillRect(12, 24, 8, 2); // Shadow under body
       ctx.strokeStyle = "rgba(0,0,0,0.4)";
       ctx.lineWidth = 2;
       ctx.strokeRect(10, 6, 12, 18);
@@ -684,10 +680,19 @@
     ctx.globalAlpha = 1;
   };
 
+  const ENEMY_COLORS = {
+    basic: { body: "#59ffcd", shadow: "#2a8b73", bulky: false },
+    fast: { body: "#ff5959", shadow: "#8b2a2a", bulky: false, lean: true },
+    tank: { body: "#ffcd59", shadow: "#8b732a", bulky: true },
+    swordsman: { body: "#cd59ff", shadow: "#732a8b", bulky: false },
+    ranged: { body: "#59cdff", shadow: "#2a738b", bulky: false }
+  };
+
   const drawEnemy = (ctx, atlas, cam, e) => {
     if (!e.active) return;
     const sx = e.x - cam.x;
     const sy = e.y - cam.y;
+    
     if (e.elite) {
       ctx.strokeStyle = "rgba(255,211,111,0.65)";
       ctx.lineWidth = 2;
@@ -700,12 +705,83 @@
     ctx.fillStyle = "#ffffff";
     if (e.hitFlash > 0) ctx.globalAlpha = 0.55;
 
-    const spr = e.elite ? atlas.elite[e.type] : atlas.enemy[e.type];
-    if (spr) {
-      const w = spr.width * GAME_SCALE;
-      const h = spr.height * GAME_SCALE;
-      ctx.drawImage(spr, Math.round(sx - w / 2), Math.round(sy - h / 2), Math.round(w), Math.round(h));
+    const colors = ENEMY_COLORS[e.type] || ENEMY_COLORS.basic;
+    const bodyColor = e.elite ? "#ffd36f" : colors.body;
+    const shadowColor = e.elite ? "#cc9922" : colors.shadow;
+    
+    // Animation angles
+    const walkAngle = Math.sin(e.walkAnim || 0);
+    const legSwing = walkAngle * 30 * Math.PI / 180;
+    const armSwing = -walkAngle * 30 * Math.PI / 180;
+    const bob = Math.abs(Math.sin(e.walkAnim || 0)) * 2;
+
+    ctx.save();
+    ctx.translate(sx, sy);
+    
+    // Flip if facing left
+    if (e.facingLeft || (e.aimX && e.aimX < 0)) {
+      ctx.scale(-1, 1);
     }
+    
+    // Scale according to elite / bulky
+    let sScale = GAME_SCALE * (e.elite ? 1.3 : 1.0);
+    ctx.scale(sScale, sScale);
+    ctx.translate(-16, -16 + bob); // Center the 32x32 logic
+
+    // Back Arm
+    ctx.save();
+    ctx.translate(12, 13);
+    ctx.rotate(armSwing);
+    pxRect(ctx, -2, 0, 4, 8, bodyColor);
+    ctx.restore();
+
+    // Back Leg
+    ctx.save();
+    ctx.translate(13, 22);
+    ctx.rotate(-legSwing);
+    pxRect(ctx, -2, 0, 4, 8, shadowColor);
+    ctx.restore();
+
+    // Body & Head
+    if (colors.bulky) {
+      pxRect(ctx, 9, 8, 14, 14, bodyColor); // Body
+      pxRect(ctx, 11, 5, 10, 4, bodyColor); // Head
+    } else {
+      pxRect(ctx, 12, 7, 8, 7, bodyColor); // Head
+      pxRect(ctx, 11, 14, 10, 9, bodyColor); // Body
+    }
+    
+    // Face (Eyes)
+    pxRect(ctx, colors.lean ? 12 : 11, 10, 2, 2, shadowColor);
+    pxRect(ctx, colors.lean ? 18 : 19, 10, 2, 2, shadowColor);
+    pxRect(ctx, 14, 12, 4, 2, shadowColor);
+
+    // Front Leg
+    ctx.save();
+    ctx.translate(19, 22);
+    ctx.rotate(legSwing);
+    pxRect(ctx, -2, 0, 4, 8, shadowColor);
+    ctx.restore();
+
+    // Front Arm
+    ctx.save();
+    ctx.translate(20, 13);
+    ctx.rotate(-armSwing);
+    pxRect(ctx, -2, 0, 4, 8, bodyColor);
+    
+    // Swordsman sword
+    if (e.type === "swordsman") {
+      pxRect(ctx, -1, 6, 12, 3, "#a0aec0"); // Blade
+      pxRect(ctx, -2, 5, 3, 5, "#4a5568"); // Hilt
+    }
+    // Ranged gun
+    if (e.type === "ranged") {
+      pxRect(ctx, -1, 5, 8, 3, "#333");
+      pxRect(ctx, 7, 5, 2, 2, "#ff3300");
+    }
+    ctx.restore();
+
+    ctx.restore();
     
     ctx.globalAlpha = 1;
     const hpPct = clamp(e.hp / e.maxHp, 0, 1);
@@ -811,7 +887,11 @@
     }
 
     if (alpha > 0) {
-      let bob = (boss.skill === null && fs.state === 'IDLE' && gs.state === 'IDLE' && fb.state === 'IDLE') ? Math.sin(fg.breathOffset) * 2 * GAME_SCALE : 0;
+      const walkAngle = Math.sin(boss.walkAnim || 0);
+      const legSwing = walkAngle * 30 * Math.PI / 180;
+      const armSwing = -walkAngle * 30 * Math.PI / 180;
+      
+      let bob = (boss.skill === null && fs.state === 'IDLE' && gs.state === 'IDLE' && fb.state === 'IDLE') ? Math.sin(fg.breathOffset) * 2 * GAME_SCALE + Math.abs(Math.sin(boss.walkAnim || 0)) * 3 * GAME_SCALE : 0;
       let shakeX = 0, shakeY = 0;
       let tilt = 0;
 
@@ -828,11 +908,22 @@
       ctx.rotate(tilt);
       ctx.scale(GAME_SCALE, GAME_SCALE);
 
-      // Legs
-      pxRect(ctx, -20, 20, 14, 30, '#2d3436');
-      pxRect(ctx, -22, 45, 18, 10, '#1e272e');
-      pxRect(ctx, 6, 20, 14, 30, '#2d3436');
-      pxRect(ctx, 4, 45, 18, 10, '#1e272e');
+      // Back Leg
+      ctx.save();
+      ctx.translate(13, 20);
+      ctx.rotate(-legSwing);
+      pxRect(ctx, -7, 0, 14, 30, '#2d3436');
+      pxRect(ctx, -9, 25, 18, 10, '#1e272e');
+      ctx.restore();
+
+      // Front Leg
+      ctx.save();
+      ctx.translate(-13, 20);
+      ctx.rotate(legSwing);
+      pxRect(ctx, -7, 0, 14, 30, '#2d3436');
+      pxRect(ctx, -9, 25, 18, 10, '#1e272e');
+      ctx.restore();
+
       // Body
       pxRect(ctx, -24, -30, 48, 55, '#3d3d3d');
       pxRect(ctx, -22, -28, 44, 8, '#4a4a4a');
@@ -843,30 +934,40 @@
       // Belt
       pxRect(ctx, -26, 20, 52, 8, '#8B4513');
       pxRect(ctx, -4, 18, 8, 12, '#CD853F');
+      
       // Left Arm
-      pxRect(ctx, -38, -20, 14, 35, '#f5d0c5');
-      pxRect(ctx, -40, -30, 18, 14, '#ff9f43');
-      pxRect(ctx, -38, -28, 14, 4, '#ffc048');
+      ctx.save();
+      ctx.translate(-31, -20);
+      ctx.rotate(armSwing);
+      pxRect(ctx, -7, 0, 14, 35, '#f5d0c5');
+      pxRect(ctx, -9, -10, 18, 14, '#ff9f43');
+      pxRect(ctx, -7, -8, 14, 4, '#ffc048');
+      ctx.restore();
 
       // Right Arm & Sword
       let rightArmY = -20, rightArmX = 24;
-      if (fs.state === 'CHARGE') { rightArmY = -60; rightArmX = 10; }
-      else if (fs.phase === 1) { const p = 1 - fs.skillTimer/300; rightArmY = -60 + p*80; rightArmX = 10 + p*40; }
-      else if (fs.phase === 2) { const p = 1 - fs.skillTimer/300; rightArmY = 20 - p*40; rightArmX = 50 - p*26; }
-      if (gs.state === 'CHARGE') rightArmY = -50;
-      if (fb.state === 'CASTING') { rightArmY = -35; rightArmX = 40; }
+      let rightArmRot = -armSwing;
+      if (fs.state === 'CHARGE') { rightArmY = -60; rightArmX = 10; rightArmRot = 0; }
+      else if (fs.phase === 1) { const p = 1 - fs.skillTimer/300; rightArmY = -60 + p*80; rightArmX = 10 + p*40; rightArmRot = 0; }
+      else if (fs.phase === 2) { const p = 1 - fs.skillTimer/300; rightArmY = 20 - p*40; rightArmX = 50 - p*26; rightArmRot = 0; }
+      if (gs.state === 'CHARGE') { rightArmY = -50; rightArmRot = 0; }
+      if (fb.state === 'CASTING') { rightArmY = -35; rightArmX = 40; rightArmRot = 0; }
 
-      pxRect(ctx, rightArmX, rightArmY, 14, 35, '#f5d0c5');
-      pxRect(ctx, rightArmX-2, rightArmY-10, 18, 14, '#ff9f43');
-      pxRect(ctx, rightArmX, rightArmY-8, 14, 4, '#ffc048');
+      ctx.save();
+      ctx.translate(rightArmX + 7, rightArmY);
+      ctx.rotate(rightArmRot);
+      
+      pxRect(ctx, -7, 0, 14, 35, '#f5d0c5');
+      pxRect(ctx, -9, -10, 18, 14, '#ff9f43');
+      pxRect(ctx, -7, -8, 14, 4, '#ffc048');
 
       if (death.state === 'IDLE' || !death.swordDropped) {
-        let swordX = rightArmX + 12, swordY = rightArmY - 45, swordRot = -30;
-        if (fs.state === 'CHARGE') { swordY = rightArmY - 70; swordRot = -90; }
-        else if (fs.phase === 1) { const p = 1 - fs.skillTimer/300; swordY = rightArmY - 70 + p*100; swordX = rightArmX + 12 + p*30; swordRot = -90 + p*150; }
-        else if (fs.phase === 2) { const p = 1 - fs.skillTimer/300; swordY = 30 - p*95; swordX = rightArmX + 42 - p*26; swordRot = 60 - p*90; }
-        if (gs.state === 'CHARGE') { swordY = rightArmY - 80; swordRot = -60; }
-        if (fb.state === 'CASTING') { swordY = rightArmY - 30; swordRot = -20; }
+        let swordX = 5, swordY = -25, swordRot = -30;
+        if (fs.state === 'CHARGE') { swordY = -50; swordRot = -90; }
+        else if (fs.phase === 1) { const p = 1 - fs.skillTimer/300; swordY = -50 + p*100; swordX = 5 + p*30; swordRot = -90 + p*150; }
+        else if (fs.phase === 2) { const p = 1 - fs.skillTimer/300; swordY = 50 - p*95; swordX = 35 - p*26; swordRot = 60 - p*90; }
+        if (gs.state === 'CHARGE') { swordY = -60; swordRot = -60; }
+        if (fb.state === 'CASTING') { swordY = -10; swordRot = -20; }
 
         const flameInt = (fs.state === 'CHARGE' || fs.phase === 1) ? 1.2 : (0.6 + Math.sin(fg.breathOffset*2)*0.3);
         ctx.save();
@@ -887,6 +988,7 @@
         ctx.fill();
         ctx.restore();
       }
+      ctx.restore();
 
       // Head
       pxRect(ctx, -18, -65, 36, 16, '#4a5568');
@@ -1012,45 +1114,199 @@
     ctx.fillRect(sx - boss.r, hpY, boss.r * 2 * hpPct, 6);
   };
 
-  const drawBoss = (ctx, atlas, cam, boss) => {
-    if (!boss || !boss.active) return;
-    if (boss.kind === "fire_giant" && boss.fg) {
-      drawFireGiant(ctx, cam, boss);
-      return;
-    }
+  const drawCoreBoss = (ctx, cam, boss) => {
     const sx = boss.x - cam.x;
     const sy = boss.y - cam.y;
     const enraged = boss.phase >= 2;
-    const pack = (atlas.boss && (atlas.boss[boss.kind] || atlas.boss.core)) || atlas.boss;
-    const spr = enraged ? pack.enraged : pack.idle;
+    const body = enraged ? "#ff6fb0" : "#7ad0ff";
+    const shadow = enraged ? "#cc3377" : "#3388cc";
 
-    if (boss.kind !== "gunslinger" && boss.kind !== "fire_giant") {
-      const pulse = 0.5 + 0.5 * Math.sin((boss.t ?? 0) * 3.2);
-      const auraCore = [122, 208, 255];
-      const auraEnr = [255, 111, 176];
-      const auraRGB = enraged ? auraEnr : auraCore;
-      const aura = `rgba(${auraRGB[0]},${auraRGB[1]},${auraRGB[2]},${(enraged ? 0.18 : 0.16) + pulse * (enraged ? 0.12 : 0.1)})`;
-      ctx.fillStyle = aura;
-      ctx.beginPath();
-      ctx.arc(sx, sy, boss.r + 22, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.strokeStyle = enraged ? "rgba(255,111,176,0.55)" : "rgba(122,208,255,0.5)";
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      ctx.arc(sx, sy, boss.r + 14, 0, Math.PI * 2);
-      ctx.stroke();
-    }
+    // Aura
+    const pulse = 0.5 + 0.5 * Math.sin((boss.t ?? 0) * 3.2);
+    const auraCore = [122, 208, 255];
+    const auraEnr = [255, 111, 176];
+    const auraRGB = enraged ? auraEnr : auraCore;
+    const aura = `rgba(${auraRGB[0]},${auraRGB[1]},${auraRGB[2]},${(enraged ? 0.18 : 0.16) + pulse * (enraged ? 0.12 : 0.1)})`;
+    ctx.fillStyle = aura;
+    ctx.beginPath();
+    ctx.arc(sx, sy, boss.r + 22, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = enraged ? "rgba(255,111,176,0.55)" : "rgba(122,208,255,0.5)";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(sx, sy, boss.r + 14, 0, Math.PI * 2);
+    ctx.stroke();
 
+    ctx.save();
     ctx.globalAlpha = boss.hitFlash > 0 ? 0.6 : 1;
-    const w = spr.width * GAME_SCALE;
-    const h = spr.height * GAME_SCALE;
-    ctx.drawImage(spr, Math.round(sx - w / 2), Math.round(sy - h / 2), Math.round(w), Math.round(h));
+    ctx.translate(sx, sy);
+    ctx.scale(GAME_SCALE, GAME_SCALE);
+
+    const walkAngle = Math.sin(boss.walkAnim || 0);
+    const legSwing = walkAngle * 30 * Math.PI / 180;
+    const armSwing = -walkAngle * 30 * Math.PI / 180;
+    const bob = Math.abs(Math.sin(boss.walkAnim || 0)) * 2;
+
+    ctx.translate(-32, -32 + bob);
+
+    // Back Arm
+    ctx.save();
+    ctx.translate(18, 26);
+    ctx.rotate(armSwing);
+    pxRect(ctx, -4, 0, 8, 18, body);
+    ctx.restore();
+
+    // Back Leg
+    ctx.save();
+    ctx.translate(24, 44);
+    ctx.rotate(-legSwing);
+    pxRect(ctx, -4, 0, 8, 12, shadow);
+    ctx.restore();
+
+    // Body
+    pxRect(ctx, 18, 18, 28, 28, body);
+    pxRect(ctx, 22, 12, 20, 8, body);
+    pxRect(ctx, 24, 28, 6, 6, shadow);
+    pxRect(ctx, 34, 28, 6, 6, shadow);
+    pxRect(ctx, 28, 36, 10, 4, shadow);
+    pxRect(ctx, 30, 6, 4, 6, "#ffd36f");
+    pxRect(ctx, 24, 10, 16, 4, "#ffd36f");
+    pxRect(ctx, 20, 14, 24, 4, "#ffd36f");
+
+    // Front Leg
+    ctx.save();
+    ctx.translate(40, 44);
+    ctx.rotate(legSwing);
+    pxRect(ctx, -4, 0, 8, 12, shadow);
+    ctx.restore();
+
+    // Front Arm
+    ctx.save();
+    ctx.translate(46, 26);
+    ctx.rotate(-armSwing);
+    pxRect(ctx, -4, 0, 8, 18, body);
+    ctx.restore();
+
+    ctx.restore();
+    
+    ctx.globalAlpha = 1;
+    const hpPct = clamp(boss.hp / boss.maxHp, 0, 1);
+    ctx.fillStyle = "rgba(0,0,0,0.4)";
+    ctx.fillRect(sx - boss.r, sy - boss.r - 14, boss.r * 2, 6);
+    ctx.fillStyle = body;
+    ctx.fillRect(sx - boss.r, sy - boss.r - 14, boss.r * 2 * hpPct, 6);
+  };
+
+  const drawGunslingerBoss = (ctx, cam, boss) => {
+    const sx = boss.x - cam.x;
+    const sy = boss.y - cam.y;
+    const enraged = boss.phase >= 2;
+    
+    const skin = "#ffd9c2";
+    const coat = "#3c404a";
+    const shirt = enraged ? "#ff0000" : "#8a1a1a";
+    const belt = "#422810";
+    const gun = "#181818";
+    const metal = "#888888";
+
+    ctx.save();
+    ctx.globalAlpha = boss.hitFlash > 0 ? 0.6 : 1;
+    ctx.translate(sx, sy);
+    
+    // Flip depending on movement / player pos? We don't have aimX here easily.
+    // If not, we just draw him.
+    
+    ctx.scale(GAME_SCALE, GAME_SCALE);
+
+    const walkAngle = Math.sin(boss.walkAnim || 0);
+    const legSwing = walkAngle * 30 * Math.PI / 180;
+    const armSwing = -walkAngle * 30 * Math.PI / 180;
+    const bob = Math.abs(Math.sin(boss.walkAnim || 0)) * 2;
+
+    ctx.translate(-32, -32 + bob);
+
+    // Back Arm (Right Arm)
+    ctx.save();
+    ctx.translate(49, 24);
+    ctx.rotate(armSwing);
+    pxRect(ctx, -3, 0, 6, 14, coat);
+    pxRect(ctx, -3, 14, 6, 4, skin);
+    pxRect(ctx, -1, 16, 4, 8, gun); // Small gun
+    ctx.restore();
+
+    // Back Leg
+    ctx.save();
+    ctx.translate(38, 42);
+    ctx.rotate(-legSwing);
+    pxRect(ctx, -4, 0, 8, 14, "#222");
+    pxRect(ctx, -5, 10, 10, 6, "#111"); // Boot
+    ctx.restore();
+
+    // Body
+    pxRect(ctx, 18, 22, 28, 20, coat);
+    pxRect(ctx, 24, 22, 16, 20, shirt);
+    pxRect(ctx, 18, 40, 6, 8, coat);
+    pxRect(ctx, 40, 40, 6, 8, coat);
+    pxRect(ctx, 22, 38, 20, 4, belt);
+    pxRect(ctx, 30, 37, 4, 6, "#ddaa00");
+
+    // Front Leg
+    ctx.save();
+    ctx.translate(26, 42);
+    ctx.rotate(legSwing);
+    pxRect(ctx, -4, 0, 8, 14, "#222");
+    pxRect(ctx, -5, 10, 10, 6, "#111"); // Boot
+    ctx.restore();
+
+    // Head
+    pxRect(ctx, 24, 12, 16, 12, skin);
+    pxRect(ctx, 24, 16, 16, 4, enraged ? "#ff0000" : "#111111"); // Bandana
+    pxRect(ctx, 28, 16, 2, 2, "#ffffff");
+    pxRect(ctx, 34, 16, 2, 2, "#ffffff");
+    pxRect(ctx, 20, 10, 24, 4, "#2a2826"); // Hat brim
+    pxRect(ctx, 24, 4, 16, 6, "#2a2826"); // Hat top
+
+    // Front Arm & Shotgun
+    ctx.save();
+    ctx.translate(15, 24);
+    // If casting spray, lift arm? We can just keep it bobbing slightly
+    ctx.rotate(-armSwing * 0.5); 
+    pxRect(ctx, -3, 0, 6, 14, coat);
+    pxRect(ctx, -3, 14, 6, 4, skin);
+    // Big Shotgun
+    pxRect(ctx, -11, 10, 18, 6, gun); // Gun barrel
+    pxRect(ctx, -13, 11, 4, 4, metal);
+    pxRect(ctx, 3, 12, 6, 8, gun); // Gun stock
+    if (boss.skill === "spray" && boss.skillStep > 0 && Math.random() < 0.3) {
+      pxRect(ctx, -21, 8, 10, 10, "#ffaa00"); // Muzzle flash
+      pxRect(ctx, -17, 10, 6, 6, "#ffffff");
+    }
+    ctx.restore();
+
+    ctx.restore();
+
     ctx.globalAlpha = 1;
     const hpPct = clamp(boss.hp / boss.maxHp, 0, 1);
     ctx.fillStyle = "rgba(0,0,0,0.4)";
     ctx.fillRect(sx - boss.r, sy - boss.r - 14, boss.r * 2, 6);
     ctx.fillStyle = enraged ? "#ff6fb0" : "#7ad0ff";
     ctx.fillRect(sx - boss.r, sy - boss.r - 14, boss.r * 2 * hpPct, 6);
+  };
+
+  const drawBoss = (ctx, atlas, cam, boss) => {
+    if (!boss || !boss.active) return;
+    if (boss.kind === "fire_giant" && boss.fg) {
+      drawFireGiant(ctx, cam, boss);
+      return;
+    }
+    if (boss.kind === "gunslinger") {
+      drawGunslingerBoss(ctx, cam, boss);
+      return;
+    }
+    if (boss.kind === "core") {
+      drawCoreBoss(ctx, cam, boss);
+      return;
+    }
   };
 
   const drawRocketLauncher = (ctx, p, slot) => {
@@ -1203,6 +1459,96 @@
     ctx.restore();
   };
 
+  const drawPlayerSprite = (ctx, p) => {
+    const hair = "#9aa5b1";
+    const skin = "#f2ccb0";
+    const shirt = "#3a3c40";
+    const shorts = "#222222";
+    const belt = "#8B4513";
+    const shoes = "#2a2a2a";
+
+    // Animation angles
+    // walkAnim is accumulated dt * 15
+    const walkAngle = Math.sin(p.walkAnim || 0);
+    const legSwing = walkAngle * 30 * Math.PI / 180;
+    const armSwing = -walkAngle * 20 * Math.PI / 180;
+
+    // Body Bob
+    const bob = Math.abs(Math.sin(p.walkAnim || 0)) * 2;
+
+    ctx.save();
+    ctx.translate(-24, -24 + bob);
+
+    // Back Arm (Right arm)
+    ctx.save();
+    ctx.translate(15, 22);
+    ctx.rotate(armSwing);
+    pxRect(ctx, -3, 0, 6, 14, skin);
+    pxRect(ctx, -3, 0, 6, 6, shirt); // Sleeve
+    ctx.restore();
+
+    // Back Leg (Right leg)
+    ctx.save();
+    ctx.translate(19, 32);
+    ctx.rotate(-legSwing);
+    pxRect(ctx, -3, 0, 6, 12, skin);
+    pxRect(ctx, -3, 0, 6, 6, shorts);
+    pxRect(ctx, -3, 8, 6, 4, shoes);
+    ctx.restore();
+
+    // Body
+    pxRect(ctx, 16, 18, 16, 14, shirt);
+    // Logo on shirt
+    pxRect(ctx, 20, 22, 2, 6, "#ffffff");
+    pxRect(ctx, 22, 22, 4, 2, "#ffffff");
+    pxRect(ctx, 26, 22, 2, 6, "#ffffff");
+
+    // Belt
+    pxRect(ctx, 16, 30, 16, 3, belt);
+    pxRect(ctx, 22, 30, 4, 3, "#ddaa00"); // Buckle
+
+    // Front Leg (Left leg)
+    ctx.save();
+    ctx.translate(27, 32);
+    ctx.rotate(legSwing);
+    pxRect(ctx, -3, 0, 6, 12, skin);
+    pxRect(ctx, -3, 0, 6, 6, shorts);
+    pxRect(ctx, -3, 8, 6, 4, shoes);
+    ctx.restore();
+
+    // Head
+    ctx.save();
+    // Head slightly bobs less
+    ctx.translate(0, -bob * 0.5);
+    pxRect(ctx, 14, 4, 20, 14, skin);
+    // Hair
+    pxRect(ctx, 12, 2, 24, 6, hair); // Top
+    pxRect(ctx, 12, 6, 4, 8, hair); // Side
+    pxRect(ctx, 14, 8, 2, 2, hair); // Detail
+    // Eyes
+    pxRect(ctx, 18, 10, 4, 4, "#111111");
+    pxRect(ctx, 28, 10, 4, 4, "#111111");
+    ctx.restore();
+
+    // Front Arm (Left arm)
+    // We only animate the front arm swing if not aiming? 
+    // Actually the player always holds the weapon in the front arm. 
+    // We can just keep the arm slightly rotated to hold the weapon, or animate it less.
+    ctx.save();
+    ctx.translate(33, 22);
+    ctx.rotate(-armSwing * 0.5); 
+    pxRect(ctx, -3, 0, 6, 14, skin);
+    pxRect(ctx, -3, 0, 6, 6, shirt); // Sleeve
+
+    // Book/Shield in Front Hand
+    pxRect(ctx, -1, 2, 10, 12, "#f1c40f");
+    pxRect(ctx, 1, 4, 6, 8, "#d35400");
+    pxRect(ctx, -1, 0, 10, 2, "#e67e22");
+    ctx.restore();
+
+    ctx.restore();
+  };
+
   const drawPlayer = (ctx, atlas, cam, p) => {
     const sx = p.x - cam.x;
     const sy = p.y - cam.y;
@@ -1233,9 +1579,12 @@
     }
     
     ctx.globalAlpha = p.invuln > 0 ? 0.6 : 1;
-    const w = atlas.player.width * GAME_SCALE * 0.5;
-    const h = atlas.player.height * GAME_SCALE * 0.5;
-    ctx.drawImage(atlas.player, -w / 2, -h / 2, w, h);
+    
+    ctx.save();
+    ctx.scale(GAME_SCALE * 0.5, GAME_SCALE * 0.5);
+    drawPlayerSprite(ctx, p);
+    ctx.restore();
+    
     ctx.globalAlpha = 1;
     
     // Draw Weapon
@@ -1248,7 +1597,7 @@
       // But because we might scale(-1, 1), the visual right arm is always at X = -12 * GAME_SCALE (before aimX rotation)
       // Actually, the weapon should point towards the mouse.
       const handX = -5 * GAME_SCALE; 
-      const handY = 1 * GAME_SCALE;
+      const handY = (1 + Math.abs(Math.sin(p.walkAnim || 0))) * GAME_SCALE;
       ctx.translate(handX, handY);
       
       // Rotate weapon towards aim (compensating for the body scale(-1, 1) flip if aiming left)
@@ -1278,8 +1627,9 @@
     ctx.strokeStyle = "rgba(255,255,255,0.18)";
     ctx.lineWidth = 2;
     ctx.beginPath();
-    ctx.moveTo(sx, sy);
-    ctx.lineTo(sx + p.aimX * (34 * GAME_SCALE * 0.5), sy + p.aimY * (34 * GAME_SCALE * 0.5));
+    const bob = Math.abs(Math.sin(p.walkAnim || 0)) * GAME_SCALE;
+    ctx.moveTo(sx, sy + bob);
+    ctx.lineTo(sx + p.aimX * (34 * GAME_SCALE * 0.5), sy + bob + p.aimY * (34 * GAME_SCALE * 0.5));
     ctx.stroke();
   };
 

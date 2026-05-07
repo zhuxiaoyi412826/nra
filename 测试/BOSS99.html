@@ -1,0 +1,377 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>拟人化人形火焰巨人BOSS</title>
+    <style>
+        body {
+            background: #0a0a0a;
+            margin: 0;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+        }
+        canvas {
+            border: 2px solid #ff6600;
+            background: #000;
+        }
+        .tip {
+            color: #ff9900;
+            margin: 10px 0;
+            font-size: 16px;
+        }
+        .ctrl {
+            margin-top: 15px;
+        }
+        button {
+            padding: 10px 25px;
+            font-size: 16px;
+            margin: 0 8px;
+            background: #ff4400;
+            color: #fff;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+        }
+        button:hover {
+            background: #ff7722;
+        }
+    </style>
+</head>
+<body>
+<div class="tip">← → 行走 | 空格：发怒变大 | 回车：喷火 | 击退按钮：掉血抖动</div>
+<canvas id="bossCanvas" width="900" height="600"></canvas>
+<div class="ctrl">
+    <button id="btnLeft">向左走</button>
+    <button id="btnStop">停止</button>
+    <button id="btnRight">向右走</button>
+    <button id="btnKnock">击退抖动</button>
+</div>
+
+<script>
+const canvas = document.getElementById('bossCanvas');
+const ctx = canvas.getContext('2d');
+
+// BOSS 核心属性
+const boss = {
+    x: 450,
+    y: 260,
+    speed: 4,
+    dir: 0,
+    frame: 0,
+    frameTimer: 0,
+    scale: 1,
+    isAngry: false,
+    angryTimer: 0,
+    isFireSkill: false,
+    fireSkillTimer: 0,
+    hp: 100,
+    maxHp: 100,
+    shakeTimer: 0
+};
+
+let flames = [];
+let fireSpray = [];
+
+// 普通火焰粒子
+class FlameParticle {
+    constructor(x, y) {
+        this.x = x;
+        this.y = y;
+        this.vx = (Math.random() - 0.5) * 1.5;
+        this.vy = -Math.random() * 2 - 0.5;
+        this.r = Math.random() * 5 + 2;
+        this.alpha = 1;
+        this.color = Math.random() > 0.4 ? '#ff2200' : '#ff9900';
+    }
+    update() {
+        this.x += this.vx;
+        this.y += this.vy;
+        this.alpha -= 0.02;
+        this.r *= 0.98;
+    }
+    draw() {
+        ctx.globalAlpha = this.alpha;
+        ctx.beginPath();
+        ctx.arc(this.x, this.y, this.r, 0, Math.PI * 2);
+        ctx.fillStyle = this.color;
+        ctx.fill();
+        ctx.globalAlpha = 1;
+    }
+}
+
+// 喷火粒子
+class FireSpray {
+    constructor(x, y) {
+        this.x = x;
+        this.y = y;
+        this.vx = Math.random() * 6 + 4;
+        this.vy = (Math.random() - 0.5) * 2;
+        this.r = Math.random() * 8 + 4;
+        this.alpha = 1;
+    }
+    update() {
+        this.x += this.vx;
+        this.y += this.vy;
+        this.alpha -= 0.015;
+        this.r *= 0.99;
+    }
+    draw() {
+        let g = ctx.createRadialGradient(this.x, this.y, 0, this.x, this.y, this.r);
+        g.addColorStop(0, '#fff');
+        g.addColorStop(0.3, '#ff9900');
+        g.addColorStop(1, 'rgba(255,30,0,0)');
+        ctx.globalAlpha = this.alpha;
+        ctx.beginPath();
+        ctx.arc(this.x, this.y, this.r, 0, Math.PI * 2);
+        ctx.fillStyle = g;
+        ctx.fill();
+        ctx.globalAlpha = 1;
+    }
+}
+
+function spawnFlame(x, y) {
+    for(let i = 0; i < 2; i++) {
+        flames.push(new FlameParticle(x, y));
+    }
+}
+
+function startFireSkill() {
+    boss.isFireSkill = true;
+    boss.fireSkillTimer = 60;
+}
+
+function startAngry() {
+    if(boss.isAngry) return;
+    boss.isAngry = true;
+    boss.angryTimer = 90;
+    boss.scale = 1.35;
+}
+
+function knockBackShake() {
+    boss.shakeTimer = 20;
+    boss.hp -= 10;
+    if(boss.hp < 0) boss.hp = 0;
+}
+
+// 绘制血条
+function drawHpBar() {
+    const barW = 140;
+    const barH = 16;
+    const bx = boss.x - barW / 2;
+    const by = boss.y - 160 * boss.scale;
+
+    ctx.fillStyle = '#333';
+    ctx.fillRect(bx, by, barW, barH);
+    let hpRate = boss.hp / boss.maxHp;
+    ctx.fillStyle = hpRate > 0.3 ? '#ff3300' : '#ff0000';
+    ctx.fillRect(bx, by, barW * hpRate, barH);
+    ctx.strokeStyle = '#fff';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(bx, by, barW, barH);
+}
+
+// 地面阴影
+function drawShadow() {
+    ctx.save();
+    ctx.globalAlpha = 0.35;
+    let shadowW = 160 * boss.scale;
+    let shadowH = 40 * boss.scale;
+    let grad = ctx.createRadialGradient(boss.x, boss.y + 330 * boss.scale, 0, boss.x, boss.y + 330 * boss.scale, shadowW/2);
+    grad.addColorStop(0, '#ff6600');
+    grad.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = grad;
+    ctx.beginPath();
+    ctx.ellipse(boss.x, boss.y + 330 * boss.scale, shadowW/2, shadowH/2, 0, 0, Math.PI*2);
+    ctx.fill();
+    ctx.globalAlpha = 1;
+    ctx.restore();
+}
+
+// 绘制【拟人化人形火焰巨人】
+function drawFireGiant() {
+    let ox = 0, oy = 0;
+    if(boss.shakeTimer > 0){
+        boss.shakeTimer--;
+        ox = (Math.random() - 0.5) * 6;
+        oy = (Math.random() - 0.5) * 6;
+    }
+
+    ctx.save();
+    ctx.translate(ox, oy);
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    // 行走动画帧
+    boss.frameTimer++;
+    if(boss.frameTimer > 5) {
+        boss.frameTimer = 0;
+        boss.frame = (boss.frame + 1) % 10;
+    }
+
+    // 发怒计时
+    if(boss.isAngry) {
+        boss.angryTimer--;
+        if(boss.angryTimer <= 0) {
+            boss.isAngry = false;
+            boss.scale = 1;
+        }
+    }
+
+    // 喷火计时
+    if(boss.isFireSkill) {
+        boss.fireSkillTimer--;
+        for(let i = 0; i < 3; i++) {
+            fireSpray.push(new FireSpray(boss.x + 55 * boss.scale, boss.y - 70 * boss.scale));
+        }
+        if(boss.fireSkillTimer <= 0) {
+            boss.isFireSkill = false;
+        }
+    }
+
+    // 真人行走正弦波形
+    let walk = Math.sin(boss.frame / 10 * Math.PI * 2);
+    let bodyUp = Math.abs(walk) * 8;     // 身体上下起伏
+    let armSwing = walk * 20;            // 手臂前后摆
+    let legStep = walk * 18;             // 双腿交替迈步
+
+    drawShadow();
+
+    ctx.save();
+    ctx.translate(boss.x, boss.y - bodyUp);
+    ctx.scale(boss.scale, boss.scale);
+
+    // 1. 头部 真人比例小头
+    ctx.fillStyle = boss.isAngry ? '#ff5500' : '#ff7722';
+    ctx.beginPath();
+    ctx.arc(0, -130, 35, 0, Math.PI * 2);
+    ctx.fill();
+
+    // 眼睛
+    ctx.fillStyle = boss.isAngry ? '#ff0000' : '#000';
+    ctx.beginPath();
+    ctx.arc(-12, -138, 5, 0, Math.PI * 2);
+    ctx.arc(12, -138, 5, 0, Math.PI * 2);
+    ctx.fill();
+
+    // 嘴巴
+    ctx.strokeStyle = '#000';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(0, -122, 12, 0.2, Math.PI - 0.2);
+    ctx.stroke();
+
+    // 2. 脖子
+    ctx.fillStyle = '#b32400';
+    ctx.fillRect(-10, -95, 20, 25);
+
+    // 3. 肩膀+躯干 人形宽肩窄腰
+    ctx.fillStyle = boss.isAngry ? '#ff1a00' : '#b32400';
+    // 上身躯干
+    ctx.fillRect(-35, -70, 70, 80);
+    // 熔岩纹路
+    ctx.fillStyle = '#ff4400';
+    ctx.fillRect(-25, -50, 50, 15);
+    ctx.fillRect(-20, -20, 40, 12);
+
+    // 4. 手臂 垂直下垂 真人前后摆动
+    ctx.fillStyle = '#c23000';
+    // 左臂
+    ctx.save();
+    ctx.translate(-35, -60);
+    ctx.rotate(armSwing * Math.PI / 180);
+    ctx.fillRect(-8, 0, 16, 90);
+    ctx.restore();
+
+    // 右臂
+    ctx.save();
+    ctx.translate(35, -60);
+    ctx.rotate(-armSwing * Math.PI / 180);
+    ctx.fillRect(-8, 0, 16, 90);
+    ctx.restore();
+
+    // 5. 双腿 真人交替迈步
+    // 左腿
+    ctx.fillRect(-22, 10, 18, 100 + legStep);
+    // 右腿
+    ctx.fillRect(4, 10, 18, 100 - legStep);
+
+    ctx.restore();
+
+    // 血条
+    drawHpBar();
+
+    // 全身环绕火焰
+    spawnFlame(boss.x, boss.y - 140 * boss.scale);
+    spawnFlame(boss.x - 35 * boss.scale, boss.y - 60 * boss.scale);
+    spawnFlame(boss.x + 35 * boss.scale, boss.y - 60 * boss.scale);
+    spawnFlame(boss.x, boss.y + 20 * boss.scale);
+
+    // 更新火焰粒子
+    for(let i = flames.length - 1; i >= 0; i--) {
+        let f = flames[i];
+        f.update();
+        f.draw();
+        if(f.alpha <= 0) flames.splice(i, 1);
+    }
+
+    // 更新喷火
+    for(let i = fireSpray.length - 1; i >= 0; i--) {
+        let f = fireSpray[i];
+        f.update();
+        f.draw();
+        if(f.alpha <= 0) fireSpray.splice(i, 1);
+    }
+
+    ctx.restore();
+}
+
+// 游戏循环
+function gameLoop() {
+    boss.x += boss.dir * boss.speed;
+    if(boss.x < 120) boss.x = 120;
+    if(boss.x > canvas.width - 120) boss.x = canvas.width - 120;
+
+    drawFireGiant();
+    requestAnimationFrame(gameLoop);
+}
+
+// 按钮控制
+document.getElementById('btnLeft').onclick = () => boss.dir = -1;
+document.getElementById('btnStop').onclick = () => boss.dir = 0;
+document.getElementById('btnRight').onclick = () => boss.dir = 1;
+document.getElementById('btnKnock').onclick = () => knockBackShake();
+
+// 键盘控制
+document.addEventListener('keydown', (e) => {
+    switch(e.key) {
+        case 'ArrowLeft': boss.dir = -1; break;
+        case 'ArrowRight': boss.dir = 1; break;
+        case ' ':
+            e.preventDefault();
+            startAngry();
+            break;
+        case 'Enter':
+            e.preventDefault();
+            startFireSkill();
+            break;
+    }
+});
+
+document.addEventListener('keyup', (e) => {
+    if(e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+        boss.dir = 0;
+    }
+});
+
+// 兼容椭圆渐变
+CanvasRenderingContext2D.prototype.createEllipticalGradient = function(x, y, rx, ry) {
+    const g = this.createRadialGradient(x, y, 0, x, y, Math.max(rx, ry));
+    return g;
+};
+
+gameLoop();
+</script>
+</body>
+</html>

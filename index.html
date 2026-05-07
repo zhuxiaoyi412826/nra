@@ -76,14 +76,15 @@
       </div>
 
       <div id="menu" class="overlay">
-        <div class="panel">
+        <div class="menu-bg-particles" aria-hidden="true"></div>
+        <div class="panel main-menu-panel">
           <h1 class="title">霓虹夜袭 <span class="abbr">NRA</span></h1>
           <div class="subtitle">俯视角像素射击：刷怪、精英、BOSS、武器与技能。建议先打开“操作说明”。</div>
           <div class="actions">
-            <button id="btn-start" class="btn primary">开始游戏</button>
-            <button id="btn-how" class="btn">操作说明</button>
-            <button id="btn-settings" class="btn">设置</button>
-            <button id="btn-reset" class="btn danger">清空本地榜</button>
+            <button id="btn-start" class="btn primary btn-large">开始游戏</button>
+            <button id="btn-how" class="btn btn-large">操作说明</button>
+            <button id="btn-settings" class="btn btn-large">设置</button>
+            <button id="btn-reset" class="btn danger btn-large">清空本地榜</button>
           </div>
           <div id="howto" class="howto" hidden>
             <div class="howto-grid">
@@ -94,7 +95,12 @@
             </div>
           </div>
           <div class="leaderboard">
-            <div class="lb-title">本地排行榜（前 10）</div>
+            <div class="lb-title">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align: text-bottom; margin-right: 4px;">
+                <path d="M12 15l-3 3h6l-3-3zM12 9V2M9 5h6M5 9h14M5 14h14M5 19h14"></path>
+              </svg>
+              本地排行榜（前 10）
+            </div>
             <ol id="lb-list" class="lb-list"></ol>
           </div>
         </div>

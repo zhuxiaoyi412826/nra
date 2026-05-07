@@ -82,6 +82,7 @@
       this.animFrame = 0;
       this.isAttacking = false;
       this.facingLeft = false;
+      this.walkAnim = 0;
     }
     init(t, x, y, difficulty, elite) {
       this.active = true;
@@ -135,6 +136,7 @@
       this.hp = this.maxHp;
       this.touchCd = 0;
       this.hitFlash = 0;
+      this.walkAnim = 0;
     }
     hurt(dmg) {
       this.hp -= dmg;
@@ -176,8 +178,19 @@
       const eliteBoost = this.elite ? 1.08 : 1.0;
       const pushingSlow = dist < this.r + (player.r ?? 16) ? 0.5 : 1.0;
       const desiredSpeed = (this.type === "ranged" && dist < 280 ? this.speed * 0.35 : this.speed) * pushingSlow;
-      this.x += n.x * desiredSpeed * nightBoost * eliteBoost * dt;
-      this.y += n.y * desiredSpeed * nightBoost * eliteBoost * dt;
+      
+      const vx = n.x * desiredSpeed * nightBoost * eliteBoost;
+      const vy = n.y * desiredSpeed * nightBoost * eliteBoost;
+      
+      this.x += vx * dt;
+      this.y += vy * dt;
+      
+      if (Math.abs(vx) > 0.1 || Math.abs(vy) > 0.1) {
+        this.walkAnim += dt * (desiredSpeed * nightBoost * eliteBoost) / 10;
+      } else {
+        this.walkAnim = 0;
+      }
+      
       this.x = clamp(this.x, this.r, world.w - this.r);
       this.y = clamp(this.y, this.r, world.h - this.r);
       for (const ob of world.obstacles) {
@@ -336,6 +349,7 @@
       this.aimY = 0;
       this.fireHeld = false;
       this.invuln = 0;
+      this.walkAnim = 0;
     }
     get slot() {
       return this.inv[this.activeSlot];
@@ -353,6 +367,14 @@
       this.y += mv.y * this.speed * slow * dt;
       this.x = clamp(this.x, this.r, world.w - this.r);
       this.y = clamp(this.y, this.r, world.h - this.r);
+      
+      if (Math.abs(mv.x) > 0.1 || Math.abs(mv.y) > 0.1) {
+        this.walkAnim += dt * 15;
+      } else {
+        // Reset walk animation smoothly or just 0
+        this.walkAnim = 0;
+      }
+      
       for (const ob of world.obstacles) {
         const res = circleRectResolve(this.x, this.y, this.r, ob);
         if (res.hit) {
