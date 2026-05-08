@@ -1466,13 +1466,13 @@
         else if (p.type === 'line') { 
           ctx.strokeStyle = 'rgba(100, 255, 100, 0.4)';
           ctx.shadowBlur = 30; ctx.shadowColor = '#00ff00';
-          ctx.lineWidth = 60 * GAME_SCALE * (p.life / 0.5);
+          ctx.lineWidth = 60 * GAME_SCALE * (p.life / p.maxLife);
           ctx.beginPath(); ctx.moveTo(px, py); ctx.lineTo(p.targetX - cam.x, p.targetY - cam.y); ctx.stroke();
           ctx.shadowBlur = 0;
         }
         else if (p.type === 'line_core') { 
           ctx.strokeStyle = '#ffffff';
-          ctx.lineWidth = 20 * GAME_SCALE * (p.life / 0.3);
+          ctx.lineWidth = 20 * GAME_SCALE * (p.life / p.maxLife);
           ctx.beginPath(); ctx.moveTo(px, py); ctx.lineTo(p.targetX - cam.x, p.targetY - cam.y); ctx.stroke();
         }
         else if (p.type === 'fog') { 

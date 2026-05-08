@@ -863,6 +863,19 @@
         if (k === "ult" && hpPct > 0.25) continue;
         this.skillReady[k] = Math.max(0, this.skillReady[k] - dt);
       }
+      
+      // Update Particles (expire over time)
+      if (vm.particles) {
+        for (let i = vm.particles.length - 1; i >= 0; i--) {
+          let p = vm.particles[i];
+          if (p.life !== undefined) {
+            p.life -= dt;
+            if (p.life <= 0) {
+              vm.particles.splice(i, 1);
+            }
+          }
+        }
+      }
 
       const toP = { x: player.x - this.x, y: player.y - this.y };
       const dist = Math.hypot(toP.x, toP.y);
@@ -957,11 +970,11 @@
           if (t > 0.8 && this.skillStep === 0) {
             this.skillStep = 1;
             const angle = Math.atan2(dir.y, dir.x);
-            addParticle({ x: this.x, y: this.y, type: 'slash', radius: 220 * GAME_SCALE, angle: angle, spread: Math.PI*1.4, life: 0.35, maxLife: 0.35, color: '#ff2222' });
-            addParticle({ x: this.x, y: this.y, type: 'slash', radius: 200 * GAME_SCALE, angle: angle, spread: Math.PI*1.2, life: 0.25, maxLife: 0.25, color: '#ffffff' });
+            addParticle({ x: this.x, y: this.y, type: 'slash', radius: (this.r * 1.8), angle: angle, spread: Math.PI*1.4, life: 5.0, maxLife: 5.0, color: '#ff2222' });
+            addParticle({ x: this.x, y: this.y, type: 'slash', radius: (this.r * 1.6), angle: angle, spread: Math.PI*1.2, life: 5.0, maxLife: 5.0, color: '#ffffff' });
             if (shake) shake.kick(10);
             if (audio) audio.bossSkill();
-            if (dist < 220 * GAME_SCALE) {
+            if (dist < this.r * 1.8) {
               const diffAngle = Math.abs(Math.atan2(toP.y, toP.x) - angle);
               if (diffAngle < Math.PI*0.7) player.takeDamage(bossDmg * 2, {x: dir.x, y: dir.y}, audio);
             }
@@ -974,8 +987,8 @@
             this.skillStep = 1;
             let tx = player.x;
             let ty = player.y;
-            addParticle({ x: this.x, y: this.y, type: 'line', targetX: tx, targetY: ty, life: 0.5 });
-            addParticle({ x: this.x, y: this.y, type: 'line_core', targetX: tx, targetY: ty, life: 0.3 });
+            addParticle({ x: this.x, y: this.y, type: 'line', targetX: tx, targetY: ty, life: 5.0, maxLife: 5.0 });
+            addParticle({ x: this.x, y: this.y, type: 'line_core', targetX: tx, targetY: ty, life: 5.0, maxLife: 5.0 });
             if (!WORLD.details) WORLD.details = [];
             WORLD.details.push({ x: tx, y: ty, r: 50 * GAME_SCALE, color: 'rgba(100, 255, 100, 0.7)', ttl: 6 });
             for(let j=0; j<10; j++) {
