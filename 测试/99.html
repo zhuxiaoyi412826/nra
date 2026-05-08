@@ -1,0 +1,676 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>虚空畸变·巢母幽噬 - 绚丽像素风</title>
+<style>
+  body { 
+    margin: 0; 
+    background: #050505; 
+    color: #eee; 
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
+    display: flex; 
+    flex-direction: column; 
+    align-items: center; 
+    padding-top: 20px;
+    overflow: hidden;
+  }
+  h1 { 
+    color: #44ff44; 
+    text-shadow: 0 0 15px rgba(0, 255, 0, 0.8); 
+    margin: 0 0 15px 0; 
+    font-size: 28px;
+    letter-spacing: 2px;
+  }
+  .panel { 
+    display: flex; 
+    gap: 15px; 
+    margin-bottom: 15px; 
+    z-index: 10;
+  }
+  .phase-group { 
+    border: 1px solid #333; 
+    padding: 12px; 
+    border-radius: 8px; 
+    background: rgba(20, 20, 20, 0.8); 
+    backdrop-filter: blur(5px);
+    box-shadow: 0 0 20px rgba(0,255,0,0.1);
+  }
+  .phase-group h3 { 
+    margin: 0 0 10px 0; 
+    font-size: 14px; 
+    color: #ff5555; 
+    border-bottom: 1px solid #442222;
+    padding-bottom: 5px;
+    text-shadow: 0 0 5px rgba(255, 0, 0, 0.5);
+  }
+  button { 
+    background: #2a1c1c; 
+    color: #ffdddd; 
+    border: 1px solid #553333; 
+    padding: 6px 12px; 
+    margin: 2px;
+    cursor: pointer; 
+    border-radius: 4px; 
+    transition: all 0.2s; 
+    font-weight: bold;
+    text-shadow: 0 0 3px rgba(255,100,100,0.5);
+  }
+  button:hover { 
+    background: #4a2c2c; 
+    border-color: #ff5555;
+    box-shadow: 0 0 12px rgba(255, 85, 85, 0.8);
+    transform: scale(1.05);
+  }
+  canvas { 
+    background: radial-gradient(circle at center, #1a0f12 0%, #050505 80%);
+    border: 2px solid #331111; 
+    border-radius: 4px;
+    box-shadow: 0 0 50px rgba(255, 50, 50, 0.15); 
+  }
+  .desc {
+    margin-top: 10px;
+    color: #aaa;
+    font-size: 13px;
+    max-width: 1000px;
+    text-align: center;
+    line-height: 1.5;
+  }
+</style>
+</head>
+<body>
+  <h1>虚空畸变·巢母幽噬</h1>
+  
+  <div class="panel">
+    <div class="phase-group">
+      <h3>第一阶段：蛰伏猎食</h3>
+      <button onclick="cast('sweep')">骨刺横扫</button>
+      <button onclick="cast('tail')">尾刺穿刺</button>
+      <button onclick="cast('acid')">酸液喷射</button>
+    </div>
+    <div class="phase-group">
+      <h3>第二阶段：狂暴孵化</h3>
+      <button onclick="cast('larva')">幼虫孵化</button>
+      <button onclick="cast('whip')">连环尾鞭</button>
+      <button onclick="cast('fog')">腐蚀瘴气</button>
+    </div>
+    <div class="phase-group">
+      <h3>第三阶段：虚空畸变</h3>
+      <button onclick="cast('bite')">内巢噬咬</button>
+      <button onclick="cast('rain')">虫卵灾雨</button>
+      <button onclick="cast('ult')" style="color:#ff3333; border-color:#ff3333; box-shadow: 0 0 10px rgba(255,0,0,0.5);">血肉坍缩 (大招)</button>
+    </div>
+    <div class="phase-group">
+      <h3>控制面板</h3>
+      <button onclick="resetField()" style="border-color:#555;">清理场地</button>
+    </div>
+  </div>
+
+  <canvas id="cvs" width="1000" height="600"></canvas>
+  <div class="desc">
+    <b>极致绚丽像素风</b>：引入了 Bloom 发光、多重混合模式 (Screen/Lighter)、动态拖尾、屏幕闪光与高频震动。<br>
+    BOSS 拥有呼吸起伏、血管流光、酸液滴落等生动细节。技能特效大升级，感受真正的压迫感与华丽杀戮！
+  </div>
+
+<script>
+const cvs = document.getElementById('cvs');
+const ctx = cvs.getContext('2d');
+ctx.imageSmoothingEnabled = false;
+
+// 游戏状态变量
+let time = 0;
+let particles = [];
+let decals = [];
+let entities = [];
+let shake = 0;
+let flash = 0; // 屏幕闪光白化
+let fogLevel = 0;
+
+const boss = {
+  x: 500, y: 250,
+  action: 'idle',
+  timer: 0,
+  coreExposed: false,
+  offsetY: 0
+};
+
+function resetField() {
+  particles = [];
+  decals = [];
+  entities = [];
+  fogLevel = 0;
+  boss.action = 'idle';
+  boss.offsetY = 0;
+  boss.coreExposed = false;
+  shake = 0;
+  flash = 0;
+}
+
+function cast(skill) {
+  boss.action = skill;
+  boss.timer = 0;
+  boss.coreExposed = false;
+  boss.offsetY = 0;
+}
+
+function addParticle(p) {
+  p.history = []; // 用于绘制拖尾
+  particles.push(p);
+}
+
+// 核心逻辑更新
+function update(dt) {
+  time += dt;
+  if (shake > 0) shake = Math.max(0, shake - dt * 60);
+  if (flash > 0) flash = Math.max(0, flash - dt * 2);
+  
+  for (let i = particles.length - 1; i >= 0; i--) {
+    let p = particles[i];
+    
+    // 记录拖尾
+    if (p.type !== 'fog' && p.type !== 'blast' && p.type !== 'shockwave' && p.type !== 'bite') {
+      p.history.push({x: p.x, y: p.y});
+      if (p.history.length > (p.trailLength || 5)) p.history.shift();
+    }
+
+    p.x += (p.vx || 0) * dt;
+    p.y += (p.vy || 0) * dt;
+    
+    if (p.type === 'egg') {
+      p.vy += 1200 * dt; 
+      if (p.y >= p.targetY) {
+        decals.push({ x: p.x, y: p.y, r: 45, color: 'rgba(68, 255, 68, 0.5)', life: 8 });
+        // 落地酸液爆裂粒子
+        for(let j=0; j<8; j++) {
+            let ang = Math.random() * Math.PI * 2;
+            let spd = 100 + Math.random() * 200;
+            addParticle({ x: p.x, y: p.y, type: 'acid_splash', vx: Math.cos(ang)*spd, vy: Math.sin(ang)*spd, life: 0.5 });
+        }
+        shake = 5;
+        p.life = 0;
+      }
+    }
+    
+    if (p.type === 'acid_splash' || p.type === 'acid') {
+       p.vy += 800 * dt; // 重力
+       if (p.y > 600) p.life = 0;
+    }
+
+    p.life -= dt;
+    if (p.life <= 0) particles.splice(i, 1);
+  }
+  
+  for (let i = decals.length - 1; i >= 0; i--) {
+    let d = decals[i];
+    d.life -= dt;
+    if (d.life <= 0) decals.splice(i, 1);
+  }
+  
+  for (let i = entities.length - 1; i >= 0; i--) {
+    let e = entities[i];
+    e.x += e.vx * dt;
+    e.y += e.vy * dt;
+    e.life -= dt;
+    if (Math.random() < 0.1) {
+      e.vx += (Math.random() - 0.5) * 300;
+      e.vy += (Math.random() - 0.5) * 300;
+      let speed = Math.hypot(e.vx, e.vy);
+      if (speed > 250) { e.vx = (e.vx/speed)*250; e.vy = (e.vy/speed)*250; }
+    }
+    if (e.x < 0 || e.x > 1000) e.vx *= -1;
+    if (e.y < 0 || e.y > 600) e.vy *= -1;
+    
+    if (e.life <= 0) {
+      decals.push({ x: e.x, y: e.y, r: 25, color: 'rgba(100, 255, 100, 0.6)', life: 4 });
+      for(let j=0; j<5; j++) {
+        let ang = Math.random() * Math.PI * 2;
+        addParticle({ x: e.x, y: e.y, type: 'acid_splash', vx: Math.cos(ang)*150, vy: Math.sin(ang)*150, life: 0.4 });
+      }
+      entities.splice(i, 1);
+    }
+  }
+
+  boss.timer += dt;
+  let t = boss.timer;
+  
+  switch (boss.action) {
+    case 'sweep': 
+      if (t > 0.8 && t < 0.85) {
+        addParticle({ x: boss.x, y: boss.y + 50, type: 'slash', radius: 220, angle: Math.PI/2, spread: Math.PI*1.4, life: 0.35, color: '#ff2222' });
+        addParticle({ x: boss.x, y: boss.y + 50, type: 'slash', radius: 200, angle: Math.PI/2, spread: Math.PI*1.2, life: 0.25, color: '#ffffff' });
+        shake = 15;
+        boss.action = 'idle';
+      }
+      break;
+    case 'tail': 
+      if (t > 0.5 && t < 0.55) {
+        let tx = boss.x + (Math.random() - 0.5) * 500;
+        let ty = boss.y + 200 + Math.random() * 150;
+        addParticle({ x: boss.x, y: boss.y, type: 'line', targetX: tx, targetY: ty, life: 0.5 });
+        addParticle({ x: boss.x, y: boss.y, type: 'line_core', targetX: tx, targetY: ty, life: 0.3 });
+        decals.push({ x: tx, y: ty, r: 50, color: 'rgba(100, 255, 100, 0.7)', life: 6 });
+        for(let j=0; j<15; j++) {
+            let ang = Math.random() * Math.PI * 2;
+            addParticle({ x: tx, y: ty, type: 'acid_splash', vx: Math.cos(ang)*300, vy: Math.sin(ang)*300, life: 0.6 });
+        }
+        shake = 20;
+        flash = 0.3;
+        boss.action = 'idle';
+      }
+      break;
+    case 'acid': 
+      if (t > 0.3 && t < 1.5) {
+        if (Math.random() < 0.8) {
+          let ang = Math.PI/2 + (Math.random() - 0.5) * 1.0;
+          let speed = 300 + Math.random() * 300;
+          addParticle({ x: boss.x, y: boss.y + 80, type: 'acid', vx: Math.cos(ang)*speed, vy: Math.sin(ang)*speed, life: 0.8 + Math.random(), trailLength: 8 });
+        }
+      } else if (t > 1.5) boss.action = 'idle';
+      break;
+    case 'larva': 
+      if (t > 0.5 && t < 0.6) {
+        for (let i = 0; i < 8; i++) {
+          let ang = Math.random() * Math.PI * 2;
+          entities.push({ x: boss.x, y: boss.y + 50, vx: Math.cos(ang)*200, vy: Math.sin(ang)*200, type: 'larva', life: 10 });
+        }
+        shake = 8;
+        boss.action = 'idle';
+      }
+      break;
+    case 'whip': 
+      if (t > 0.5 && t < 2.5) {
+        if (Math.random() < 0.25) {
+          addParticle({ x: boss.x, y: boss.y, type: 'slash', radius: 150 + Math.random()*150, angle: Math.random()*Math.PI*2, spread: Math.PI, life: 0.2, color: '#ff3333' });
+          shake = 10;
+        }
+      }
+      if (t > 2.5 && t < 2.6) { 
+        shake = 35; 
+        flash = 0.4;
+        addParticle({ x: boss.x, y: boss.y + 100, type: 'shockwave', life: 0.8, maxLife: 0.8 });
+        boss.action = 'idle'; 
+      }
+      break;
+    case 'fog': 
+      if (t < 3.0) {
+        fogLevel = Math.min(1, fogLevel + dt * 0.5);
+        if (Math.random() < 0.6) {
+          addParticle({ x: boss.x + (Math.random()-0.5)*400, y: boss.y + (Math.random()-0.5)*400, type: 'fog', vx: (Math.random()-0.5)*50, vy: (Math.random()-0.5)*50, life: 8, maxLife: 8 });
+        }
+      } else { boss.action = 'idle'; }
+      break;
+    case 'bite': 
+      if (t < 0.4) {
+        boss.offsetY += 600 * dt; 
+      } else if (t > 0.4 && t < 0.6) {
+        if(t < 0.45) { shake = 30; flash = 0.5; }
+        addParticle({ x: boss.x, y: boss.y + boss.offsetY + 50, type: 'bite', life: 0.4 });
+      } else if (t > 1.2 && t < 1.6) {
+        boss.offsetY -= 600 * dt; 
+      } else if (t > 1.6) { 
+        boss.offsetY = 0;
+        boss.action = 'idle'; 
+      }
+      break;
+    case 'rain': 
+      if (t < 3.0) {
+        if (Math.random() < 0.5) {
+          let tx = boss.x + (Math.random() - 0.5) * 900;
+          let ty = boss.y + 150 + Math.random() * 350;
+          addParticle({ x: tx, y: -50, type: 'egg', targetY: ty, vx: 0, vy: 200, life: 5, trailLength: 15 });
+        }
+      } else { boss.action = 'idle'; }
+      break;
+    case 'ult': 
+      boss.coreExposed = true;
+      if (t < 3.0) {
+        if (Math.random() < 0.8) {
+          let ang = Math.random() * Math.PI * 2;
+          let dist = 400 + Math.random() * 300;
+          addParticle({ x: boss.x + Math.cos(ang)*dist, y: boss.y + boss.offsetY + Math.sin(ang)*dist, type: 'suck', vx: -Math.cos(ang)*dist*0.6, vy: -Math.sin(ang)*dist*0.6, life: 1.5, trailLength: 6 });
+        }
+        shake = 5 + t * 5; // 震动逐渐增强
+      } else if (t > 3.0 && t < 3.1) {
+        shake = 50;
+        flash = 1.0;
+        addParticle({ x: boss.x, y: boss.y + boss.offsetY, type: 'blast', life: 1.5, maxLife: 1.5 });
+        fogLevel = 1;
+      } else if (t > 6.0) {
+        boss.coreExposed = false;
+        boss.action = 'idle';
+      }
+      break;
+  }
+}
+
+// 极致绚丽的纯像素风绘制巢母
+function drawBossPixel(ctx) {
+  ctx.save();
+  let s = 1 + Math.sin(time * 4) * 0.02; // 呼吸
+  ctx.scale(s * 4, s * 4); // 放大模拟大像素
+
+  const pxRect = (x, y, w, h, c) => {
+    ctx.fillStyle = c;
+    ctx.fillRect(Math.round(x), Math.round(y), Math.round(w), Math.round(h));
+  };
+
+  // 尾巴摆动
+  let tailSwing = Math.sin(time * 2.5) * 6;
+  if (boss.action === 'tail') tailSwing = Math.sin(time * 30) * 15; // 狂乱摆动预警
+  
+  pxRect(-2 + tailSwing*0.1, -40, 4, 12, '#0a0a0a');
+  pxRect(-3 + tailSwing*0.4, -32, 6, 12, '#151515');
+  pxRect(-4 + tailSwing*0.8, -22, 8, 12, '#222');
+  // 尾巴毒刺高光
+  pxRect(-1 + tailSwing*0.1, -42, 2, 4, '#88ff88');
+
+  // 后肢 (反向关节)
+  pxRect(-22, -10, 12, 6, '#151515');
+  pxRect(-28, -15, 8, 12, '#0f0f0f');
+  pxRect(-30, -5, 4, 18, '#050505');
+  pxRect(-31, 13, 6, 2, '#555'); // 爪尖
+  
+  pxRect(10, -10, 12, 6, '#151515');
+  pxRect(20, -15, 8, 12, '#0f0f0f');
+  pxRect(26, -5, 4, 18, '#050505');
+  pxRect(25, 13, 6, 2, '#555');
+
+  // 躯干底座与肌肉
+  pxRect(-18, -16, 36, 38, '#1a1010'); // 深渊底色
+  pxRect(-16, -14, 32, 32, '#2b1a1a'); // 肌肉层
+  pxRect(-12, -10, 24, 26, '#3a2222'); // 核心肌肉
+
+  // 脉动的血管 (荧光绿)
+  let veinColor = (Math.sin(time * 5) > 0) ? '#228822' : '#115511';
+  pxRect(-10, -2, 2, 10, veinColor);
+  pxRect(8, -2, 2, 10, veinColor);
+  pxRect(-4, 10, 8, 2, veinColor);
+
+  // 背部甲壳与骨刺 (带反光)
+  pxRect(-14, -12, 28, 20, '#111');
+  pxRect(-12, -8, 24, 14, '#1a1a1a');
+  pxRect(-10, -6, 20, 4, '#2a2a2a'); // 甲壳高光
+
+  // 骨刺
+  pxRect(-16, -10, 4, 2, '#aaa'); pxRect(-18, -12, 2, 2, '#fff');
+  pxRect(12, -10, 4, 2, '#aaa');  pxRect(16, -12, 2, 2, '#fff');
+  pxRect(-18, 0, 4, 2, '#aaa');   pxRect(-20, -2, 2, 2, '#fff');
+  pxRect(14, 0, 4, 2, '#aaa');    pxRect(18, -2, 2, 2, '#fff');
+
+  // 荧光绿卵囊与酸液包 (加入辉光)
+  ctx.shadowBlur = 10;
+  ctx.shadowColor = '#00ff00';
+  pxRect(-14, 10, 8, 8, '#114411'); pxRect(-12, 12, 4, 4, '#44ff44'); pxRect(-11, 13, 2, 2, '#ccffcc');
+  pxRect(6, 14, 10, 8, '#114411');  pxRect(8, 16, 6, 4, '#44ff44');  pxRect(10, 17, 2, 2, '#ccffcc');
+  pxRect(-6, 18, 12, 6, '#114411'); pxRect(-4, 19, 8, 4, '#44ff44'); pxRect(-2, 20, 4, 2, '#ccffcc');
+  ctx.shadowBlur = 0;
+
+  // 核心肉瘤 (大招外露时极度明亮)
+  if (boss.coreExposed) {
+      let coreGlow = 10 + Math.random() * 10;
+      ctx.shadowBlur = 20;
+      ctx.shadowColor = '#ff0000';
+      pxRect(-8, -6, 16, 16, '#550000');
+      pxRect(-6, -4, 12, 12, '#ff0000');
+      pxRect(-4, -2, 8, 8, '#ff8888');
+      pxRect(-2, 0, 4, 4, '#ffffff');
+      ctx.shadowBlur = 0;
+  }
+
+  // 头部 (异形长梭形)
+  let headY = boss.action === 'bite' ? 15 : 0;
+  ctx.translate(0, headY);
+  
+  pxRect(-8, 22, 16, 12, '#151515');
+  pxRect(-6, 34, 12, 14, '#111');
+  pxRect(-4, 48, 8, 10, '#0a0a0a');
+  pxRect(-2, 24, 4, 20, '#1a1a1a'); // 头部高光
+  
+  // 邪恶的红色眼孔
+  ctx.shadowBlur = 8;
+  ctx.shadowColor = '#ff0000';
+  pxRect(-5, 38, 3, 2, '#ff1111');
+  pxRect(2, 38, 3, 2, '#ff1111');
+  ctx.shadowBlur = 0;
+
+  if (boss.action === 'fog') {
+      ctx.shadowBlur = 10;
+      ctx.shadowColor = '#8800ff';
+      pxRect(-10, 26, 3, 3, '#bb55ff'); // 喷吐毒雾
+      pxRect(7, 26, 3, 3, '#bb55ff');
+      ctx.shadowBlur = 0;
+  }
+
+  // 嘴部与酸液/牙齿
+  if (boss.action === 'acid') {
+      ctx.shadowBlur = 15;
+      ctx.shadowColor = '#00ff00';
+      pxRect(-5, 56, 10, 8, '#111'); 
+      pxRect(-3, 56, 6, 12, '#44ff44'); 
+      pxRect(-1, 60, 2, 10, '#ccffcc'); 
+      ctx.shadowBlur = 0;
+  } else if (boss.action === 'bite') {
+      pxRect(-6, 56, 12, 8, '#ff1111'); 
+      pxRect(-4, 56, 2, 4, '#fff'); 
+      pxRect(2, 56, 2, 4, '#fff');
+      pxRect(-2, 62, 4, 6, '#ffaaaa'); 
+  } else {
+      pxRect(-3, 56, 6, 2, '#aaa'); 
+  }
+  ctx.translate(0, -headY);
+
+  // 前肢巨型螯爪
+  let leftClawY = boss.action === 'sweep' ? 25 : 0;
+  let rightClawY = boss.action === 'sweep' ? -10 : 0;
+  
+  pxRect(-26, 8 + leftClawY, 10, 18, '#1a1a1a');
+  pxRect(-30, 22 + leftClawY, 8, 28, '#111');
+  pxRect(-28, 50 + leftClawY, 4, 12, '#ddd'); // 锋利爪尖
+  pxRect(-27, 62 + leftClawY, 2, 6, '#fff');
+  
+  pxRect(16, 8 + rightClawY, 10, 18, '#1a1a1a');
+  pxRect(22, 22 + rightClawY, 8, 28, '#111');
+  pxRect(24, 50 + rightClawY, 4, 12, '#ddd');
+  pxRect(25, 62 + rightClawY, 2, 6, '#fff');
+
+  ctx.restore();
+}
+
+function draw() {
+  ctx.fillStyle = '#0a0505';
+  ctx.fillRect(0, 0, cvs.width, cvs.height);
+  
+  ctx.save();
+  let sx = (Math.random() - 0.5) * shake;
+  let sy = (Math.random() - 0.5) * shake;
+  ctx.translate(sx, sy);
+  
+  // 混合模式：使得发光特效叠加更加绚丽
+  ctx.globalCompositeOperation = 'source-over';
+
+  // 像素风贴花（地上的酸液/血迹）
+  decals.forEach(d => {
+    ctx.globalAlpha = Math.min(1, d.life / 2);
+    ctx.fillStyle = d.color;
+    ctx.shadowBlur = 15;
+    ctx.shadowColor = d.color;
+    ctx.fillRect(d.x - d.r, d.y - d.r, d.r*2, d.r*2);
+    ctx.shadowBlur = 0;
+    ctx.globalAlpha = 1;
+  });
+  
+  // 绘制像素风 BOSS
+  ctx.save();
+  ctx.translate(boss.x, boss.y + boss.offsetY);
+  drawBossPixel(ctx);
+  ctx.restore();
+  
+  // 像素风实体（幼虫）
+  entities.forEach(e => {
+    if (e.type === 'larva') {
+      ctx.fillStyle = '#225522';
+      ctx.fillRect(e.x - 10, e.y - 6, 20, 12);
+      ctx.fillStyle = '#66ff66';
+      ctx.fillRect(e.x - 8, e.y - 4, 16, 8);
+      ctx.fillStyle = '#ff0000'; // 红色小眼睛
+      ctx.fillRect(e.x + (e.vx>0?4:-6), e.y - 2, 2, 2);
+    }
+  });
+  
+  // 像素风特效粒子
+  ctx.globalCompositeOperation = 'screen'; // 开启高光混合叠加
+  
+  particles.forEach(p => {
+    // 绘制拖尾
+    if (p.history && p.history.length > 1) {
+      ctx.beginPath();
+      ctx.moveTo(p.history[0].x, p.history[0].y);
+      for(let j=1; j<p.history.length; j++) ctx.lineTo(p.history[j].x, p.history[j].y);
+      ctx.strokeStyle = p.type === 'acid' ? '#44ff44' : (p.type === 'egg' ? '#2b442b' : '#aa44ff');
+      ctx.lineWidth = p.type === 'egg' ? 16 : 8;
+      ctx.lineCap = 'square';
+      ctx.globalAlpha = 0.4;
+      ctx.stroke();
+      ctx.globalAlpha = 1;
+    }
+
+    if (p.type === 'acid' || p.type === 'acid_splash') {
+      ctx.shadowBlur = 10; ctx.shadowColor = '#00ff00';
+      ctx.fillStyle = '#44ff44';
+      ctx.globalAlpha = Math.min(1, p.life);
+      let size = p.type === 'acid' ? 16 : 8;
+      ctx.fillRect(p.x - size/2, p.y - size/2, size, size);
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(p.x - size/4, p.y - size/4, size/2, size/2); // 高光核心
+      ctx.shadowBlur = 0;
+    } 
+    else if (p.type === 'slash') { 
+      ctx.strokeStyle = p.color;
+      ctx.shadowBlur = 20; ctx.shadowColor = p.color;
+      ctx.lineWidth = 24 * (p.life / 0.35);
+      ctx.lineCap = 'square';
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.radius, p.angle - p.spread/2, p.angle + p.spread/2);
+      ctx.stroke();
+      ctx.shadowBlur = 0;
+    } 
+    else if (p.type === 'line') { 
+      ctx.strokeStyle = 'rgba(100, 255, 100, 0.4)';
+      ctx.shadowBlur = 30; ctx.shadowColor = '#00ff00';
+      ctx.lineWidth = 60 * (p.life / 0.5);
+      ctx.beginPath(); ctx.moveTo(p.x, p.y); ctx.lineTo(p.targetX, p.targetY); ctx.stroke();
+      ctx.shadowBlur = 0;
+    }
+    else if (p.type === 'line_core') { 
+      ctx.strokeStyle = '#ffffff';
+      ctx.lineWidth = 20 * (p.life / 0.3);
+      ctx.beginPath(); ctx.moveTo(p.x, p.y); ctx.lineTo(p.targetX, p.targetY); ctx.stroke();
+    }
+    else if (p.type === 'fog') { 
+      ctx.globalCompositeOperation = 'source-over';
+      ctx.fillStyle = '#1a0525';
+      ctx.globalAlpha = (p.life / p.maxLife) * 0.8;
+      ctx.fillRect(p.x - 140, p.y - 140, 280, 280); 
+      // 雾气中的诡异红眼
+      if(Math.random() < 0.1) {
+        ctx.fillStyle = '#ff0000';
+        ctx.globalAlpha = 1;
+        ctx.fillRect(p.x - 20, p.y - 10, 8, 8);
+        ctx.fillRect(p.x + 12, p.y - 10, 8, 8);
+      }
+      ctx.globalCompositeOperation = 'screen';
+    } 
+    else if (p.type === 'egg') { 
+      ctx.globalCompositeOperation = 'source-over';
+      ctx.fillStyle = '#113311';
+      ctx.fillRect(p.x - 14, p.y - 20, 28, 40);
+      ctx.fillStyle = '#44ff44';
+      ctx.fillRect(p.x - 8, p.y - 12, 16, 24);
+      ctx.globalCompositeOperation = 'screen';
+    } 
+    else if (p.type === 'suck') { 
+      ctx.fillStyle = '#aa44ff';
+      ctx.shadowBlur = 15; ctx.shadowColor = '#aa44ff';
+      ctx.fillRect(p.x - 6, p.y - 6, 12, 12);
+      ctx.fillStyle = '#fff';
+      ctx.fillRect(p.x - 2, p.y - 2, 4, 4);
+      ctx.shadowBlur = 0;
+    } 
+    else if (p.type === 'blast') { 
+      let progress = 1 - p.life / p.maxLife;
+      let r = 800 * progress;
+      ctx.fillStyle = `rgba(255, 50, 50, ${1 - progress})`;
+      ctx.fillRect(p.x - r, p.y - r, r*2, r*2); 
+      ctx.fillStyle = `rgba(255, 255, 255, ${1 - progress})`;
+      ctx.fillRect(p.x - r/2, p.y - r/2, r, r); 
+    } 
+    else if (p.type === 'shockwave') { 
+      ctx.strokeStyle = 'rgba(255, 50, 50, 0.8)';
+      ctx.shadowBlur = 20; ctx.shadowColor = '#ff0000';
+      ctx.lineWidth = 20;
+      let r = 400 * (1 - p.life / p.maxLife);
+      ctx.strokeRect(p.x - r, p.y - r, r*2, r*2);
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.8)';
+      ctx.lineWidth = 5;
+      ctx.strokeRect(p.x - r + 10, p.y - r + 10, r*2 - 20, r*2 - 20);
+      ctx.shadowBlur = 0;
+    }
+    else if (p.type === 'bite') { 
+      ctx.globalCompositeOperation = 'source-over';
+      ctx.strokeStyle = '#ff0000';
+      ctx.shadowBlur = 30; ctx.shadowColor = '#ff0000';
+      ctx.lineWidth = 24;
+      ctx.lineJoin = 'miter'; 
+      let pr = 1 - (p.life / 0.4);
+      ctx.beginPath(); 
+      ctx.moveTo(p.x - 120, p.y + 80 - pr*70); ctx.lineTo(p.x, p.y + 160 - pr*70); ctx.lineTo(p.x + 120, p.y + 80 - pr*70);
+      ctx.stroke();
+      ctx.beginPath(); 
+      ctx.moveTo(p.x - 120, p.y + 200 + pr*70); ctx.lineTo(p.x, p.y + 120 + pr*70); ctx.lineTo(p.x + 120, p.y + 200 + pr*70);
+      ctx.stroke();
+      
+      ctx.strokeStyle = '#ffffff';
+      ctx.lineWidth = 8;
+      ctx.shadowBlur = 0;
+      ctx.beginPath(); 
+      ctx.moveTo(p.x - 120, p.y + 80 - pr*70); ctx.lineTo(p.x, p.y + 160 - pr*70); ctx.lineTo(p.x + 120, p.y + 80 - pr*70);
+      ctx.stroke();
+      ctx.beginPath(); 
+      ctx.moveTo(p.x - 120, p.y + 200 + pr*70); ctx.lineTo(p.x, p.y + 120 + pr*70); ctx.lineTo(p.x + 120, p.y + 200 + pr*70);
+      ctx.stroke();
+      ctx.globalCompositeOperation = 'screen';
+    }
+    ctx.globalAlpha = 1;
+  });
+  
+  ctx.globalCompositeOperation = 'source-over';
+  if (fogLevel > 0) {
+    ctx.fillStyle = `rgba(15, 5, 20, ${fogLevel * 0.7})`;
+    ctx.fillRect(0, 0, cvs.width, cvs.height);
+  }
+
+  // 全屏闪光
+  if (flash > 0) {
+    ctx.globalCompositeOperation = 'screen';
+    ctx.fillStyle = `rgba(255, 255, 255, ${flash})`;
+    ctx.fillRect(0, 0, cvs.width, cvs.height);
+  }
+  
+  ctx.restore();
+}
+
+let lastTime = performance.now();
+function loop(now) {
+  let dt = (now - lastTime) / 1000;
+  if (dt > 0.1) dt = 0.1; 
+  lastTime = now;
+  
+  update(dt);
+  draw();
+  
+  requestAnimationFrame(loop);
+}
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>

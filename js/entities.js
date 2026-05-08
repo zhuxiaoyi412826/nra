@@ -107,6 +107,8 @@
       this.isAttacking = false;
       this.facingLeft = false;
       this.walkAnim = 0;
+      this.weaponType = 'none';
+      this.attackAnim = 0;
     }
     init(t, x, y, difficulty, elite) {
       this.active = true;
@@ -114,6 +116,8 @@
       this.elite = Boolean(elite);
       this.x = x;
       this.y = y;
+      this.isAttacking = false;
+      this.attackAnim = 0;
       const base = difficulty;
       if (t === "basic") {
         this.r = ENEMY_BASE_R.basic * GAME_SCALE;
@@ -121,37 +125,38 @@
         this.speed = 118 + base * 12;
         this.touchDmg = 9 + base * 2;
         this.shootCd = 0;
+        this.weaponType = rand() > 0.5 ? 'stick' : 'sword';
       } else if (t === "fast") {
         this.r = ENEMY_BASE_R.fast * GAME_SCALE;
         this.maxHp = 26 + base * 7;
         this.speed = 168 + base * 16;
         this.touchDmg = 8 + base * 2;
         this.shootCd = 0;
+        this.weaponType = 'sword';
       } else if (t === "tank") {
         this.r = ENEMY_BASE_R.tank * GAME_SCALE;
         this.maxHp = 70 + base * 20;
         this.speed = 88 + base * 10;
         this.touchDmg = 14 + base * 3;
         this.shootCd = 0;
+        this.weaponType = 'hammer';
       } else if (t === "swordsman") {
         this.r = 16 * GAME_SCALE;
         this.maxHp = 45 + base * 10;
         this.speed = 135 + base * 12;
         this.touchDmg = 15 + base * 3;
         this.shootCd = 0;
-        this.animTimer = 0;
-        this.animFrame = 0;
-        this.isAttacking = false;
-        this.facingLeft = false;
+        this.weaponType = 'sword';
       } else {
         this.r = ENEMY_BASE_R.ranged * GAME_SCALE;
         this.maxHp = 30 + base * 10;
         this.speed = 110 + base * 10;
         this.touchDmg = 7 + base * 2;
         this.shootCd = rand(0.6, 1.2);
+        this.weaponType = 'none';
       }
       if (this.elite) {
-        this.r += ENEMY_ELITE_BONUS_R * GAME_SCALE;
+        this.r *= 1.666; // 精英怪的体型比普通敌人大三分之二
         this.maxHp = Math.floor(this.maxHp * 1.85 + 10);
         this.speed *= 1.14;
         this.touchDmg = Math.floor(this.touchDmg * 1.25);
@@ -224,10 +229,31 @@
           this.y = res.y;
         }
       }
-      if (dist < this.r + player.r + 2 && this.touchCd <= 0) {
-        this.touchCd = this.elite ? 0.45 : 0.55;
-        player.takeDamage(this.touchDmg, { x: n.x, y: n.y }, audio);
+
+      if (this.weaponType !== 'none') {
+        if (dist <= player.r + this.r + 20 * GAME_SCALE && !this.isAttacking && this.touchCd <= 0) {
+          this.isAttacking = true;
+          this.attackAnim = 0;
+        }
+
+        if (this.isAttacking) {
+          this.attackAnim += dt * 3.5; // Attack speed
+          if (this.attackAnim >= 1) {
+            this.isAttacking = false;
+            this.attackAnim = 0;
+            this.touchCd = this.elite ? 0.45 : 0.55;
+            if (dist <= player.r + this.r + 25 * GAME_SCALE) {
+              player.takeDamage(this.touchDmg, { x: n.x, y: n.y }, audio);
+            }
+          }
+        }
+      } else {
+        if (dist < this.r + player.r + 2 && this.touchCd <= 0) {
+          this.touchCd = this.elite ? 0.45 : 0.55;
+          player.takeDamage(this.touchDmg, { x: n.x, y: n.y }, audio);
+        }
       }
+
       if (this.type === "ranged") {
         this.shootCd = Math.max(0, this.shootCd - dt);
         if (this.shootCd <= 0 && dist < 560 && dist > 140) {

@@ -461,6 +461,12 @@ canvas#minimap {
   margin-bottom: 8px;
 }
 
+.boss-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
 .boss-card {
   width: 100%;
   text-align: left;
@@ -470,10 +476,8 @@ canvas#minimap {
   background: rgba(0, 0, 0, 0.18);
   color: #e6edf3;
   cursor: pointer;
-}
-
-.boss-card + .boss-card {
-  margin-top: 8px;
+  display: flex;
+  flex-direction: column;
 }
 
 .boss-card:hover {

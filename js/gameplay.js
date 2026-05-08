@@ -123,7 +123,7 @@
         ttlB: 0.55,
         sizeA: 1,
         sizeB: 5,
-        color: kind === "fire_giant" ? "#ff4400" : (kind === "gunslinger" ? "#ffd36f" : "#7ad0ff"),
+        color: kind === "fire_giant" ? "#ff4400" : (kind === "gunslinger" ? "#ffd36f" : (kind === "void_mother" ? "#ff00ff" : "#7ad0ff")),
         alpha: 0.92,
         drag: 3.0,
         gravity: 200,

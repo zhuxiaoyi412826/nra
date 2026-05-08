@@ -5,6 +5,7 @@ Desktop.ini
 
 # Logs
 *.log
+*.zip
 
 # Dependencies / build outputs (if added later)
 node_modules/

@@ -66,21 +66,18 @@
           death: { state: 'IDLE', timer: 0, phase: 0, particles: [], ashParticles: [], burnMark: null, swordDropped: false, droppedSword: null },
           readyToDie: false
         };
-      } else if (this.kind === "morphila") {
-        this.name = "幽影咒主·莫菲拉";
-        this.r = 40 * GAME_SCALE;
-        this.skillCd = { bind: 8.0, barrage: 6.0, domain: 14.0, ult: 45.0 };
-        this.skillReady = { bind: 0, barrage: 0, domain: 0, ult: 45.0 };
-        this.maxHp = Math.floor(1100 + level * 280);
-        this.mp = {
-          crystals: [{a:0}, {a:2.09}, {a:4.18}],
-          binds: [],
-          domain: { active: false, r: 0, timer: 0 },
-          ult: { state: 'IDLE', timer: 0 },
-          weakened: 0,
-          shield: 0,
-          marks: 0,
-          markTimer: 0
+      } else if (this.kind === "void_mother") {
+        this.name = "虚空畸变·巢母幽噬";
+        this.r = Math.floor(46 * 0.888) * GAME_SCALE; // 比第一个大三分之一然后再缩小三分之一 => 61 * (2/3) ≈ 41
+        this.skillCd = { sweep: 4.0, tail: 5.0, acid: 6.0, larva: 8.0, whip: 7.0, fog: 15.0, bite: 6.0, rain: 10.0, ult: 30.0 };
+        this.skillReady = { sweep: 0, tail: 0, acid: 0, larva: 0, whip: 0, fog: 0, bite: 0, rain: 0, ult: 30.0 };
+        this.maxHp = Math.floor(1500 + level * 350);
+        this.vm = {
+          coreExposed: false,
+          offsetY: 0,
+          fogLevel: 0,
+          eggs: [],
+          larvas: []
         };
       } else {
         this.name = "灾厄核心";
@@ -106,9 +103,9 @@
     hurt(dmg) {
       if (this.kind === "fire_giant" && this.fg && this.fg.death.state !== 'IDLE') return false;
       let finalDmg = dmg;
-      if (this.kind === "morphila" && this.mp) {
-        if (this.mp.shield > 0) finalDmg *= (1 - this.mp.shield);
-        if (this.mp.weakened > 0) finalDmg *= 1.4;
+      if (this.kind === "void_mother" && this.vm) {
+        if (this.vm.coreExposed) finalDmg *= 3.0; // 3x damage when core is exposed (during ult)
+        else finalDmg *= 0.8; // Acid armor, reduces damage slightly
       }
       this.hp -= finalDmg;
       this.hitFlash = 0.1;
@@ -140,7 +137,7 @@
       if (pool.length === 0) {
         if (this.kind === "gunslinger") return "spray";
         if (this.kind === "fire_giant") return "sword";
-        if (this.kind === "morphila") return "barrage";
+        if (this.kind === "void_mother") return "sweep";
         return "barrage";
       }
       const w = [];
@@ -155,11 +152,12 @@
           else if (k === "breath") w.push(2);
           else if (k === "ball") w.push(2);
           else w.push(3);
-        } else if (this.kind === "morphila") {
-          if (k === "ult" && this.hp / this.maxHp <= 0.3) w.push(10); // High priority if ready
-          else if (k === "domain") w.push(2);
-          else if (k === "bind") w.push(2);
-          else w.push(3);
+        } else if (this.kind === "void_mother") {
+          if (k === "ult" && this.hp / this.maxHp <= 0.25) w.push(20); // Very high priority if <25% HP
+          else if (this.phase === 1 && ["sweep", "tail", "acid"].includes(k)) w.push(3);
+          else if (this.phase === 2 && ["larva", "whip", "fog"].includes(k)) w.push(3);
+          else if (this.phase === 3 && ["bite", "rain"].includes(k)) w.push(3);
+          else w.push(0.5); // Can still use other phase skills but lower probability
         } else {
           if (k === "summon") w.push(this.phase >= 2 ? 2 : 1);
           else if (k === "dash") w.push(2);
@@ -249,8 +247,8 @@
     }
 
     update(dt, player, bullets, spawnMinions, emit, audio, difficulty, isNight, shake) {
-      if (this.kind === "morphila") {
-        this.updateMorphila(dt, player, bullets, spawnMinions, emit, audio, difficulty, isNight, shake);
+      if (this.kind === "void_mother") {
+        this.updateVoidMother(dt, player, bullets, spawnMinions, emit, audio, difficulty, isNight, shake);
         return;
       }
       if (this.kind === "gunslinger") {
@@ -850,27 +848,19 @@
         }
       }
     }
-    updateMorphila(dt, player, bullets, spawnMinions, emit, audio, difficulty, isNight, shake) {
+    updateVoidMother(dt, player, bullets, spawnMinions, emit, audio, difficulty, isNight, shake) {
       if (!this.active) return;
-      const mp = this.mp;
+      const vm = this.vm;
       const ms = dt * 1000;
       this.t += dt;
       this.hitFlash = Math.max(0, this.hitFlash - dt);
       this.contactCd = Math.max(0, this.contactCd - dt);
       const hpPct = this.hp / this.maxHp;
-      this.phase = hpPct <= 0.3 ? 2 : 1;
+      this.phase = hpPct <= 0.25 ? 3 : (hpPct <= 0.6 ? 2 : 1);
 
-      // Crystals rotation
-      for (let i=0; i<3; i++) {
-        mp.crystals[i].a += dt * (hpPct <= 0.3 ? 3 : 1.5);
-      }
-      
-      mp.weakened = Math.max(0, mp.weakened - dt);
-      mp.markTimer = Math.max(0, mp.markTimer - dt);
-      if (mp.markTimer <= 0) mp.marks = 0; // reset marks if no hits
-
+      // Decrement cooldowns
       for (const k of Object.keys(this.skillReady)) {
-        if (k === "ult" && hpPct > 0.3) continue; // Ult locked until 30% HP
+        if (k === "ult" && hpPct > 0.25) continue;
         this.skillReady[k] = Math.max(0, this.skillReady[k] - dt);
       }
 
@@ -878,13 +868,12 @@
       const dist = Math.hypot(toP.x, toP.y);
       const dir = dist > 1e-6 ? { x: toP.x / dist, y: toP.y / dist } : { x: 0, y: 0 };
 
-      let vx = 0, vy = 0;
-      
       // Movement
-      if (this.skill === null) {
-        const baseSpeed = 45 + difficulty * 5;
+      let vx = 0, vy = 0;
+      if (!this.skill) {
+        const baseSpeed = (40 + difficulty * 4) * (this.phase >= 2 ? 1.35 : 1);
         const nightBoost = isNight ? 1.1 : 1.0;
-        const keep = dist > 400 ? 1 : dist < 200 ? -0.8 : (Math.sin(this.t) * 0.5); // kite player
+        const keep = dist > 350 ? 1 : dist < 150 ? -0.5 : 0.2; 
         vx = dir.x * baseSpeed * keep * nightBoost;
         vy = dir.y * baseSpeed * keep * nightBoost;
         this.x += vx * dt;
@@ -903,57 +892,44 @@
       // Contact dmg
       if (dist < this.r + player.r + 6 * GAME_SCALE && this.contactCd <= 0) {
         this.contactCd = 1.0;
-        player.takeDamage(10 + difficulty * 2, { x: dir.x, y: dir.y }, audio);
+        player.takeDamage(15 + difficulty * 3, { x: dir.x, y: dir.y }, audio);
         if (emit) emit.hurtPlayer(player.x, player.y);
       }
 
-      // Domain Logic
-      if (mp.domain.active) {
-        mp.domain.timer -= dt;
-        mp.domain.r = Math.min(120 * GAME_SCALE, mp.domain.r + 20 * GAME_SCALE * dt); // max 12m (assume 10px = 1m -> 120px)
-        
-        const dP = Math.hypot(player.x - mp.domain.x, player.y - mp.domain.y);
-        if (dP <= mp.domain.r) {
-           // DoT and slow handled in gameplay if needed, but we can do it here
-           if (this.t % 0.5 < dt) {
-             player.takeDamage((20 + difficulty * 3)*0.5, {x:0, y:0});
-             // We can just slow player by modifying speed, but we don't have direct access.
-             // We'll just deal damage here.
-           }
+      // Update custom entities (larvas)
+      for (let i = vm.larvas.length - 1; i >= 0; i--) {
+        let e = vm.larvas[i];
+        e.x += e.vx * dt;
+        e.y += e.vy * dt;
+        e.life -= dt;
+        // Homing to player
+        const toPlayer = { x: player.x - e.x, y: player.y - e.y };
+        const distToPlayer = Math.hypot(toPlayer.x, toPlayer.y);
+        if (distToPlayer > 0) {
+          e.vx += (toPlayer.x / distToPlayer) * 300 * dt;
+          e.vy += (toPlayer.y / distToPlayer) * 300 * dt;
         }
+        let speed = Math.hypot(e.vx, e.vy);
+        if (speed > 250) { e.vx = (e.vx/speed)*250; e.vy = (e.vy/speed)*250; }
         
-        if (mp.domain.timer <= 0) {
-          mp.domain.active = false;
-          mp.shield = 0;
-          if (shake) shake.kick(3);
-          // Explosion at end
-          if (dP <= mp.domain.r) {
-            player.takeDamage(player.hp * 0.25, {x:0, y:0}, audio); // 25% current HP
-            if (emit) emit.hurtPlayer(player.x, player.y);
-          }
+        e.x = clamp(e.x, 0, WORLD.w);
+        e.y = clamp(e.y, 0, WORLD.h);
+        
+        if (distToPlayer < player.r + 10 && e.life > 0) {
+           player.takeDamage(5 + difficulty, {x:0, y:0});
+           e.life = 0; // explode
+        }
+
+        if (e.life <= 0) {
+          if (!WORLD.details) WORLD.details = [];
+          WORLD.details.push({ x: e.x, y: e.y, r: 25 * GAME_SCALE, color: 'rgba(100, 255, 100, 0.6)', ttl: 4 });
+          vm.larvas.splice(i, 1);
         }
       }
 
-      // Binds Logic
-      for (let i = mp.binds.length - 1; i >= 0; i--) {
-        const b = mp.binds[i];
-        b.timer -= dt;
-        if (b.timer <= 0) {
-          mp.binds.splice(i, 1);
-          continue;
-        }
-        // If player in bind
-        const dP = Math.hypot(player.x - b.x, player.y - b.y);
-        if (dP <= b.r) {
-          if (this.t % 0.5 < dt) {
-            player.takeDamage((12 + difficulty * 2)*0.5, {x:0,y:0});
-          }
-          // Roots player (forces velocity 0 in gameplay? We can set player position)
-          if (player.rollTimer <= 0) {
-            player.x += (b.x - player.x) * 0.1;
-            player.y += (b.y - player.y) * 0.1;
-          }
-        }
+      // Update fog
+      if (vm.fogLevel > 0 && this.skill !== 'fog' && this.skill !== 'ult') {
+        vm.fogLevel = Math.max(0, vm.fogLevel - dt * 0.1); // Slowly dissipates
       }
 
       // Skill Picking
@@ -962,73 +938,163 @@
         if (this.nextSkill <= 0) {
           this.beginSkill(this.pickSkill(), audio);
           this.nextSkill = 999;
+          vm.particles = vm.particles || [];
         }
         return;
       }
 
       this.skillT += dt;
+      const t = this.skillT;
       const bossDmg = 15 + difficulty * 3;
 
-      if (this.skill === "bind") {
-        if (this.skillT >= 0.5 && this.skillStep === 0) {
-          this.skillStep = 1;
-          if (audio) audio.bossSkill();
-          // Create bind at player pos
-          mp.binds.push({ x: player.x, y: player.y, r: 35 * GAME_SCALE, timer: 5.0 });
-        }
-        if (this.skillT >= 1.0) {
-          this.skill = null;
-          this.nextSkill = 1.0;
-        }
-      } else if (this.skill === "barrage") {
-        if (this.skillT >= 0.4 && this.skillStep === 0) {
-          this.skillStep = 1;
-          if (audio) audio.bossSkill();
-          const count = hpPct < 0.5 ? 15 : 10;
-          for (let i=0; i<count; i++) {
-            const speed = 300 + Math.random()*150;
-            const tracking = hpPct < 0.5 ? 4 : 2;
-            this.fireHoming(bullets, player, speed, bossDmg, 5, "#a48bff", 45, tracking);
-          }
-        }
-        if (this.skillT >= 1.2) {
-          this.skill = null;
-          this.nextSkill = 1.0;
-        }
-      } else if (this.skill === "domain") {
-        if (this.skillT >= 0.5 && this.skillStep === 0) {
-          this.skillStep = 1;
-          if (audio) audio.bossSkill();
-          mp.domain = { active: true, x: this.x, y: this.y, r: 80 * GAME_SCALE, timer: 6.0 };
-          mp.shield = 0.3; // 30% reduction
-        }
-        if (this.skillT >= 1.0) {
-          this.skill = null;
-          this.nextSkill = 0.5;
-        }
-      } else if (this.skill === "ult") {
-        if (this.skillStep === 0) {
-          this.skillStep = 1;
-          if (audio) audio.bossSkill();
-        }
-        if (this.skillT >= 3.0 && this.skillStep === 1) {
-          this.skillStep = 2;
-          if (shake) shake.kick(8);
-          // Huge AoE
-          const dP = Math.hypot(player.x - this.x, player.y - this.y);
-          if (dP <= 400 * GAME_SCALE) {
-            player.takeDamage(bossDmg * 5, {x:dir.x, y:dir.y}, audio);
-            if (player.hp / player.maxHp < 0.4) {
-              player.takeDamage(player.hp * 0.3, {x:0, y:0}, audio);
+      const addParticle = (p) => {
+        p.history = [];
+        vm.particles.push(p);
+      };
+
+      switch (this.skill) {
+        case 'sweep': 
+          if (t > 0.8 && this.skillStep === 0) {
+            this.skillStep = 1;
+            const angle = Math.atan2(dir.y, dir.x);
+            addParticle({ x: this.x, y: this.y, type: 'slash', radius: 220 * GAME_SCALE, angle: angle, spread: Math.PI*1.4, life: 0.35, maxLife: 0.35, color: '#ff2222' });
+            addParticle({ x: this.x, y: this.y, type: 'slash', radius: 200 * GAME_SCALE, angle: angle, spread: Math.PI*1.2, life: 0.25, maxLife: 0.25, color: '#ffffff' });
+            if (shake) shake.kick(10);
+            if (audio) audio.bossSkill();
+            if (dist < 220 * GAME_SCALE) {
+              const diffAngle = Math.abs(Math.atan2(toP.y, toP.x) - angle);
+              if (diffAngle < Math.PI*0.7) player.takeDamage(bossDmg * 2, {x: dir.x, y: dir.y}, audio);
             }
-            if (emit) emit.hurtPlayer(player.x, player.y);
           }
-          mp.weakened = 5.0;
-        }
-        if (this.skillT >= 4.0) {
-          this.skill = null;
-          this.nextSkill = 2.0;
-        }
+          if (t > 1.2) { this.skill = null; this.nextSkill = 1.0; }
+          break;
+
+        case 'tail': 
+          if (t > 0.5 && this.skillStep === 0) {
+            this.skillStep = 1;
+            let tx = player.x;
+            let ty = player.y;
+            addParticle({ x: this.x, y: this.y, type: 'line', targetX: tx, targetY: ty, life: 0.5 });
+            addParticle({ x: this.x, y: this.y, type: 'line_core', targetX: tx, targetY: ty, life: 0.3 });
+            if (!WORLD.details) WORLD.details = [];
+            WORLD.details.push({ x: tx, y: ty, r: 50 * GAME_SCALE, color: 'rgba(100, 255, 100, 0.7)', ttl: 6 });
+            for(let j=0; j<10; j++) {
+                let ang = Math.random() * Math.PI * 2;
+                addParticle({ x: tx, y: ty, type: 'acid_splash', vx: Math.cos(ang)*300, vy: Math.sin(ang)*300, life: 0.6 });
+            }
+            if (shake) shake.kick(15);
+            if (audio) audio.bossSkill();
+            if (Math.hypot(player.x - tx, player.y - ty) < 60 * GAME_SCALE) player.takeDamage(bossDmg * 2.5, {x:0,y:0}, audio);
+          }
+          if (t > 1.0) { this.skill = null; this.nextSkill = 1.0; }
+          break;
+
+        case 'acid': 
+          if (t > 0.3 && t < 1.5) {
+            if (Math.random() < 0.8) {
+              let baseAng = Math.atan2(dir.y, dir.x);
+              let ang = baseAng + (Math.random() - 0.5) * 1.0;
+              let speed = 300 + Math.random() * 300;
+              addParticle({ x: this.x, y: this.y, type: 'acid', vx: Math.cos(ang)*speed, vy: Math.sin(ang)*speed, life: 0.8 + Math.random(), trailLength: 8 });
+            }
+            if (dist < 200 * GAME_SCALE && Math.random() < 0.1) player.takeDamage(bossDmg * 0.5, {x:0,y:0}); // acid hits
+          } else if (t > 1.5) { this.skill = null; this.nextSkill = 1.0; }
+          break;
+
+        case 'larva': 
+          if (t > 0.5 && this.skillStep === 0) {
+            this.skillStep = 1;
+            for (let i = 0; i < 8; i++) {
+              let ang = Math.random() * Math.PI * 2;
+              vm.larvas.push({ x: this.x, y: this.y, vx: Math.cos(ang)*200, vy: Math.sin(ang)*200, type: 'larva', life: 10 });
+            }
+            if (shake) shake.kick(5);
+            if (audio) audio.bossSkill();
+          }
+          if (t > 1.0) { this.skill = null; this.nextSkill = 1.5; }
+          break;
+
+        case 'whip': 
+          if (t > 0.5 && t < 2.5) {
+            if (Math.random() < 0.25) {
+              addParticle({ x: this.x, y: this.y, type: 'slash', radius: (150 + Math.random()*150)*GAME_SCALE, angle: Math.random()*Math.PI*2, spread: Math.PI, life: 0.2, maxLife: 0.2, color: '#ff3333' });
+              if (shake) shake.kick(8);
+              if (dist < 300 * GAME_SCALE) player.takeDamage(bossDmg * 0.8, {x:0,y:0});
+            }
+          }
+          if (t > 2.5 && this.skillStep === 0) { 
+            this.skillStep = 1;
+            if (shake) shake.kick(25); 
+            addParticle({ x: this.x, y: this.y, type: 'shockwave', life: 0.8, maxLife: 0.8 });
+            if (dist < 400 * GAME_SCALE) {
+               player.takeDamage(bossDmg * 1.5, {x: dir.x, y: dir.y});
+               player.rollTimer = 0; // Interrupt roll if possible
+            }
+          }
+          if (t > 3.5) { this.skill = null; this.nextSkill = 1.5; }
+          break;
+
+        case 'fog': 
+          if (t < 3.0) {
+            vm.fogLevel = Math.min(1, vm.fogLevel + dt * 0.5);
+            if (Math.random() < 0.6) {
+              addParticle({ x: this.x + (Math.random()-0.5)*400, y: this.y + (Math.random()-0.5)*400, type: 'fog', vx: (Math.random()-0.5)*50, vy: (Math.random()-0.5)*50, life: 8, maxLife: 8 });
+            }
+            if (this.t % 0.5 < dt) player.takeDamage(bossDmg * 0.2, {x:0,y:0}); // DoT
+          } else { this.skill = null; this.nextSkill = 1.0; }
+          break;
+
+        case 'bite': 
+          if (t < 0.4) {
+            vm.offsetY += 600 * dt; 
+            this.y += 400 * dt * dir.y;
+            this.x += 400 * dt * dir.x;
+          } else if (t > 0.4 && this.skillStep === 0) {
+            this.skillStep = 1;
+            if (shake) shake.kick(25); 
+            addParticle({ x: this.x, y: this.y + vm.offsetY, type: 'bite', life: 0.4 });
+            if (dist < 180 * GAME_SCALE) player.takeDamage(bossDmg * 4, {x: dir.x, y: dir.y}, audio);
+          } else if (t > 1.2 && t < 1.6) {
+            vm.offsetY -= 600 * dt; 
+          } else if (t > 1.6) { 
+            vm.offsetY = 0;
+            this.skill = null; this.nextSkill = 1.5; 
+          }
+          break;
+
+        case 'rain': 
+          if (t < 3.0) {
+            if (Math.random() < 0.5) {
+              let tx = player.x + (Math.random() - 0.5) * 400;
+              let ty = player.y + (Math.random() - 0.5) * 400;
+              addParticle({ x: tx, y: this.y - 400, type: 'egg', targetY: ty, vx: 0, vy: 200, life: 5, trailLength: 15 });
+            }
+          } else { this.skill = null; this.nextSkill = 1.0; }
+          break;
+
+        case 'ult': 
+          vm.coreExposed = true;
+          if (t < 3.0) {
+            if (Math.random() < 0.8) {
+              let ang = Math.random() * Math.PI * 2;
+              let distTo = 400 + Math.random() * 300;
+              addParticle({ x: this.x + Math.cos(ang)*distTo, y: this.y + vm.offsetY + Math.sin(ang)*distTo, type: 'suck', vx: -Math.cos(ang)*distTo*0.6, vy: -Math.sin(ang)*distTo*0.6, life: 1.5, trailLength: 6 });
+            }
+            if (shake) shake.kick(2); // buildup
+          } else if (t > 3.0 && this.skillStep === 0) {
+            this.skillStep = 1;
+            if (shake) shake.kick(40);
+            addParticle({ x: this.x, y: this.y + vm.offsetY, type: 'blast', life: 1.5, maxLife: 1.5 });
+            vm.fogLevel = 1;
+            if (dist < 800 * GAME_SCALE) {
+               player.takeDamage(bossDmg * 6, {x:dir.x, y:dir.y}, audio);
+               if (player.hp / player.maxHp < 0.4) player.takeDamage(player.hp * 0.3, {x:0, y:0});
+            }
+          } else if (t > 6.0) {
+            vm.coreExposed = false;
+            this.skill = null; this.nextSkill = 2.0;
+          }
+          break;
       }
     }
   }

@@ -781,7 +781,7 @@
       ctx.strokeStyle = "rgba(255,211,111,0.65)";
       ctx.lineWidth = 2;
       ctx.beginPath();
-      ctx.arc(sx, sy, e.r + 10, 0, Math.PI * 2);
+      ctx.arc(sx, sy, e.r, 0, Math.PI * 2);
       ctx.stroke();
     }
     
@@ -808,7 +808,7 @@
     }
     
     // Scale according to elite / bulky
-    let sScale = GAME_SCALE * (e.elite ? 1.3 : 1.0);
+    let sScale = GAME_SCALE * (e.elite ? 1.666 : 1.0); // 精英怪体型比普通大2/3
     ctx.scale(sScale, sScale);
     ctx.translate(-16, -16 + bob); // Center the 32x32 logic
 
@@ -850,18 +850,46 @@
     // Front Arm
     ctx.save();
     ctx.translate(20, 13);
-    ctx.rotate(-armSwing);
+    
+    let armRot = -armSwing;
+    if (e.isAttacking) {
+      // Attack animation: wind up then strike
+      const p = e.attackAnim; // 0 to 1
+      if (p < 0.3) {
+        armRot -= p * Math.PI; // Wind up back
+      } else {
+        const strike = (p - 0.3) / 0.7;
+        armRot -= 0.3 * Math.PI - strike * Math.PI * 1.5; // Strike forward
+      }
+    }
+    ctx.rotate(armRot);
+    
     pxRect(ctx, -2, 0, 4, 8, bodyColor);
     
-    // Swordsman sword
-    if (e.type === "swordsman") {
-      pxRect(ctx, -1, 6, 12, 3, "#a0aec0"); // Blade
-      pxRect(ctx, -2, 5, 3, 5, "#4a5568"); // Hilt
-    }
     // Ranged gun
     if (e.type === "ranged") {
       pxRect(ctx, -1, 5, 8, 3, "#333");
       pxRect(ctx, 7, 5, 2, 2, "#ff3300");
+    } else if (e.weaponType) {
+      // Draw melee weapon in hand
+      const wx = -1;
+      const wy = 6;
+      if (e.weaponType === 'sword' || e.type === "swordsman") {
+        pxRect(ctx, wx, wy, 12, 3, "#a0aec0"); // Blade
+        pxRect(ctx, wx-1, wy-1, 3, 5, "#4a5568"); // Hilt
+        if (e.elite) {
+          ctx.globalCompositeOperation = 'lighter';
+          pxRect(ctx, wx+2, wy, 10, 1, 'rgba(255, 200, 100, 0.6)'); // Glowing edge
+          ctx.globalCompositeOperation = 'source-over';
+        }
+      } else if (e.weaponType === 'stick') {
+        pxRect(ctx, wx-2, wy, 14, 2, "#8b5a2b"); // Wooden stick
+        pxRect(ctx, wx+10, wy-1, 2, 4, "#5c3a21"); // Stick knot
+      } else if (e.weaponType === 'hammer') {
+        pxRect(ctx, wx-2, wy, 10, 2, "#8b5a2b"); // Handle
+        pxRect(ctx, wx+8, wy-4, 6, 10, "#718096"); // Hammer head
+        pxRect(ctx, wx+9, wy-2, 4, 6, "#4a5568"); // Hammer core
+      }
     }
     ctx.restore();
 
@@ -1213,12 +1241,12 @@
     const aura = `rgba(${auraRGB[0]},${auraRGB[1]},${auraRGB[2]},${(enraged ? 0.18 : 0.16) + pulse * (enraged ? 0.12 : 0.1)})`;
     ctx.fillStyle = aura;
     ctx.beginPath();
-    ctx.arc(sx, sy, boss.r + 22, 0, Math.PI * 2);
+    ctx.arc(sx, sy, boss.r, 0, Math.PI * 2);
     ctx.fill();
     ctx.strokeStyle = enraged ? "rgba(255,111,176,0.55)" : "rgba(122,208,255,0.5)";
     ctx.lineWidth = 2;
     ctx.beginPath();
-    ctx.arc(sx, sy, boss.r + 14, 0, Math.PI * 2);
+    ctx.arc(sx, sy, boss.r, 0, Math.PI * 2);
     ctx.stroke();
 
     ctx.save();
@@ -1377,76 +1405,293 @@
     ctx.fillRect(sx - boss.r, sy - boss.r - 14, boss.r * 2 * hpPct, 6);
   };
 
-  const drawMorphilaBoss = (ctx, atlas, cam, b) => {
+  const drawVoidMotherBoss = (ctx, atlas, cam, b) => {
     if (!b || !b.active) return;
     const sx = b.x - cam.x;
     const sy = b.y - cam.y;
-    
-    // Domain
-    if (b.mp && b.mp.domain && b.mp.domain.active) {
-      ctx.save();
-      ctx.translate(b.mp.domain.x - cam.x, b.mp.domain.y - cam.y);
-      ctx.fillStyle = 'rgba(20, 0, 30, 0.4)';
-      ctx.strokeStyle = '#9b59b6';
-      ctx.lineWidth = 3;
-      ctx.beginPath();
-      ctx.arc(0, 0, b.mp.domain.r, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.stroke();
-      ctx.restore();
+    const vm = b.vm;
+    const time = b.t;
+
+    // 绘制雾气背景
+    ctx.save();
+    ctx.globalCompositeOperation = 'source-over';
+    if (vm.fogLevel > 0) {
+      ctx.fillStyle = `rgba(15, 5, 20, ${vm.fogLevel * 0.7})`;
+      ctx.fillRect(0, 0, window.innerWidth, window.innerHeight); // Use window size for fog to cover screen
     }
-    
-    // Binds
-    if (b.mp && b.mp.binds) {
-      for (const bind of b.mp.binds) {
-        ctx.save();
-        ctx.translate(bind.x - cam.x, bind.y - cam.y);
-        ctx.fillStyle = 'rgba(40, 0, 60, 0.5)';
-        ctx.strokeStyle = '#ff2a2a';
-        ctx.lineWidth = 2;
-        ctx.beginPath();
-        ctx.arc(0, 0, bind.r, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.stroke();
-        ctx.restore();
-      }
+    ctx.restore();
+
+    ctx.save();
+    ctx.globalCompositeOperation = 'source-over';
+
+    // 绘制拖尾和特效 (Particles)
+    ctx.globalCompositeOperation = 'screen';
+    if (vm.particles) {
+      vm.particles.forEach(p => {
+        if (p.history && p.history.length > 1) {
+          ctx.beginPath();
+          ctx.moveTo(p.history[0].x - cam.x, p.history[0].y - cam.y);
+          for(let j=1; j<p.history.length; j++) ctx.lineTo(p.history[j].x - cam.x, p.history[j].y - cam.y);
+          ctx.strokeStyle = p.type === 'acid' ? '#44ff44' : (p.type === 'egg' ? '#2b442b' : '#aa44ff');
+          ctx.lineWidth = p.type === 'egg' ? 16 * GAME_SCALE : 8 * GAME_SCALE;
+          ctx.lineCap = 'square';
+          ctx.globalAlpha = 0.4;
+          ctx.stroke();
+          ctx.globalAlpha = 1;
+        }
+
+        const px = p.x - cam.x;
+        const py = p.y - cam.y;
+
+        if (p.type === 'acid' || p.type === 'acid_splash') {
+          ctx.shadowBlur = 10; ctx.shadowColor = '#00ff00';
+          ctx.fillStyle = '#44ff44';
+          ctx.globalAlpha = Math.min(1, p.life);
+          let size = (p.type === 'acid' ? 16 : 8) * GAME_SCALE;
+          ctx.fillRect(px - size/2, py - size/2, size, size);
+          ctx.fillStyle = '#ffffff';
+          ctx.fillRect(px - size/4, py - size/4, size/2, size/2); 
+          ctx.shadowBlur = 0;
+        } 
+        else if (p.type === 'slash') { 
+          ctx.strokeStyle = p.color;
+          ctx.shadowBlur = 20; ctx.shadowColor = p.color;
+          ctx.lineWidth = 24 * GAME_SCALE * (p.life / p.maxLife);
+          ctx.lineCap = 'square';
+          ctx.beginPath();
+          ctx.arc(px, py, p.radius, p.angle - p.spread/2, p.angle + p.spread/2);
+          ctx.stroke();
+          ctx.shadowBlur = 0;
+        } 
+        else if (p.type === 'line') { 
+          ctx.strokeStyle = 'rgba(100, 255, 100, 0.4)';
+          ctx.shadowBlur = 30; ctx.shadowColor = '#00ff00';
+          ctx.lineWidth = 60 * GAME_SCALE * (p.life / 0.5);
+          ctx.beginPath(); ctx.moveTo(px, py); ctx.lineTo(p.targetX - cam.x, p.targetY - cam.y); ctx.stroke();
+          ctx.shadowBlur = 0;
+        }
+        else if (p.type === 'line_core') { 
+          ctx.strokeStyle = '#ffffff';
+          ctx.lineWidth = 20 * GAME_SCALE * (p.life / 0.3);
+          ctx.beginPath(); ctx.moveTo(px, py); ctx.lineTo(p.targetX - cam.x, p.targetY - cam.y); ctx.stroke();
+        }
+        else if (p.type === 'fog') { 
+          ctx.globalCompositeOperation = 'source-over';
+          ctx.fillStyle = '#1a0525';
+          ctx.globalAlpha = (p.life / p.maxLife) * 0.8;
+          ctx.fillRect(px - 140 * GAME_SCALE, py - 140 * GAME_SCALE, 280 * GAME_SCALE, 280 * GAME_SCALE); 
+          if(Math.random() < 0.1) {
+            ctx.fillStyle = '#ff0000';
+            ctx.globalAlpha = 1;
+            ctx.fillRect(px - 20 * GAME_SCALE, py - 10 * GAME_SCALE, 8 * GAME_SCALE, 8 * GAME_SCALE);
+            ctx.fillRect(px + 12 * GAME_SCALE, py - 10 * GAME_SCALE, 8 * GAME_SCALE, 8 * GAME_SCALE);
+          }
+          ctx.globalCompositeOperation = 'screen';
+        } 
+        else if (p.type === 'egg') { 
+          ctx.globalCompositeOperation = 'source-over';
+          ctx.fillStyle = '#113311';
+          ctx.fillRect(px - 14 * GAME_SCALE, py - 20 * GAME_SCALE, 28 * GAME_SCALE, 40 * GAME_SCALE);
+          ctx.fillStyle = '#44ff44';
+          ctx.fillRect(px - 8 * GAME_SCALE, py - 12 * GAME_SCALE, 16 * GAME_SCALE, 24 * GAME_SCALE);
+          ctx.globalCompositeOperation = 'screen';
+        } 
+        else if (p.type === 'suck') { 
+          ctx.fillStyle = '#aa44ff';
+          ctx.shadowBlur = 15; ctx.shadowColor = '#aa44ff';
+          ctx.fillRect(px - 6 * GAME_SCALE, py - 6 * GAME_SCALE, 12 * GAME_SCALE, 12 * GAME_SCALE);
+          ctx.fillStyle = '#fff';
+          ctx.fillRect(px - 2 * GAME_SCALE, py - 2 * GAME_SCALE, 4 * GAME_SCALE, 4 * GAME_SCALE);
+          ctx.shadowBlur = 0;
+        } 
+        else if (p.type === 'blast') { 
+          let progress = 1 - p.life / p.maxLife;
+          let r = 800 * GAME_SCALE * progress;
+          ctx.fillStyle = `rgba(255, 50, 50, ${1 - progress})`;
+          ctx.fillRect(px - r, py - r, r*2, r*2); 
+          ctx.fillStyle = `rgba(255, 255, 255, ${1 - progress})`;
+          ctx.fillRect(px - r/2, py - r/2, r, r); 
+        } 
+        else if (p.type === 'shockwave') { 
+          ctx.strokeStyle = 'rgba(255, 50, 50, 0.8)';
+          ctx.shadowBlur = 20; ctx.shadowColor = '#ff0000';
+          ctx.lineWidth = 20 * GAME_SCALE;
+          let r = 400 * GAME_SCALE * (1 - p.life / p.maxLife);
+          ctx.strokeRect(px - r, py - r, r*2, r*2);
+          ctx.strokeStyle = 'rgba(255, 255, 255, 0.8)';
+          ctx.lineWidth = 5 * GAME_SCALE;
+          ctx.strokeRect(px - r + 10*GAME_SCALE, py - r + 10*GAME_SCALE, r*2 - 20*GAME_SCALE, r*2 - 20*GAME_SCALE);
+          ctx.shadowBlur = 0;
+        }
+        else if (p.type === 'bite') { 
+          ctx.globalCompositeOperation = 'source-over';
+          ctx.strokeStyle = '#ff0000';
+          ctx.shadowBlur = 30; ctx.shadowColor = '#ff0000';
+          ctx.lineWidth = 24 * GAME_SCALE;
+          ctx.lineJoin = 'miter'; 
+          let pr = 1 - (p.life / 0.4);
+          ctx.beginPath(); 
+          ctx.moveTo(px - 120*GAME_SCALE, py + 80*GAME_SCALE - pr*70*GAME_SCALE); ctx.lineTo(px, py + 160*GAME_SCALE - pr*70*GAME_SCALE); ctx.lineTo(px + 120*GAME_SCALE, py + 80*GAME_SCALE - pr*70*GAME_SCALE);
+          ctx.stroke();
+          ctx.beginPath(); 
+          ctx.moveTo(px - 120*GAME_SCALE, py + 200*GAME_SCALE + pr*70*GAME_SCALE); ctx.lineTo(px, py + 120*GAME_SCALE + pr*70*GAME_SCALE); ctx.lineTo(px + 120*GAME_SCALE, py + 200*GAME_SCALE + pr*70*GAME_SCALE);
+          ctx.stroke();
+          
+          ctx.strokeStyle = '#ffffff';
+          ctx.lineWidth = 8 * GAME_SCALE;
+          ctx.shadowBlur = 0;
+          ctx.beginPath(); 
+          ctx.moveTo(px - 120*GAME_SCALE, py + 80*GAME_SCALE - pr*70*GAME_SCALE); ctx.lineTo(px, py + 160*GAME_SCALE - pr*70*GAME_SCALE); ctx.lineTo(px + 120*GAME_SCALE, py + 80*GAME_SCALE - pr*70*GAME_SCALE);
+          ctx.stroke();
+          ctx.beginPath(); 
+          ctx.moveTo(px - 120*GAME_SCALE, py + 200*GAME_SCALE + pr*70*GAME_SCALE); ctx.lineTo(px, py + 120*GAME_SCALE + pr*70*GAME_SCALE); ctx.lineTo(px + 120*GAME_SCALE, py + 200*GAME_SCALE + pr*70*GAME_SCALE);
+          ctx.stroke();
+          ctx.globalCompositeOperation = 'screen';
+        }
+        ctx.globalAlpha = 1;
+      });
     }
 
-    const state = b.phase >= 2 ? atlas.boss.morphila.enraged : atlas.boss.morphila.idle;
-    const crystalColor = b.phase >= 2 ? '#ff2a2a' : '#9b59b6';
-    
-    const wave = Math.sin(b.walkAnim || 0);
-    const bob = Math.abs(wave) * 4 * GAME_SCALE;
-    const swing = wave * 15;
-    
+    ctx.globalCompositeOperation = 'source-over';
+
+    // 绘制小怪 (Larvas)
+    if (vm.larvas) {
+      vm.larvas.forEach(e => {
+        const ex = e.x - cam.x;
+        const ey = e.y - cam.y;
+        ctx.fillStyle = '#225522';
+        ctx.fillRect(ex - 10 * GAME_SCALE, ey - 6 * GAME_SCALE, 20 * GAME_SCALE, 12 * GAME_SCALE);
+        ctx.fillStyle = '#66ff66';
+        ctx.fillRect(ex - 8 * GAME_SCALE, ey - 4 * GAME_SCALE, 16 * GAME_SCALE, 8 * GAME_SCALE);
+        ctx.fillStyle = '#ff0000';
+        ctx.fillRect(ex + (e.vx>0?4:-6) * GAME_SCALE, ey - 2 * GAME_SCALE, 2 * GAME_SCALE, 2 * GAME_SCALE);
+      });
+    }
+
+    // 绘制像素风主体 BOSS
     ctx.save();
-    ctx.translate(Math.round(sx), Math.round(sy - bob));
+    ctx.translate(sx, sy + vm.offsetY);
     
-    // Floating crystals
-    if (b.mp && b.mp.crystals) {
-      for (let i = 0; i < 3; i++) {
-        const a = b.mp.crystals[i].a;
-        const cx = Math.cos(a) * 50 * GAME_SCALE;
-        const cy = Math.sin(a) * 50 * GAME_SCALE;
-        ctx.fillStyle = crystalColor;
-        ctx.beginPath();
-        ctx.arc(cx, cy, 6 * GAME_SCALE, 0, Math.PI * 2);
-        ctx.fill();
-      }
+    // 呼吸起伏
+    let s = 1 + Math.sin(time * 4) * 0.02; 
+    ctx.scale(s * 1.33 * GAME_SCALE, s * 1.33 * GAME_SCALE); // 视觉体型缩小三分之一
+
+    // 尾巴摆动
+    let tailSwing = Math.sin(time * 2.5) * 6;
+    if (b.skill === 'tail') tailSwing = Math.sin(time * 30) * 15; // 狂乱摆动预警
+    
+    pxRect(ctx, -2 + tailSwing*0.1, -40, 4, 12, '#0a0a0a');
+    pxRect(ctx, -3 + tailSwing*0.4, -32, 6, 12, '#151515');
+    pxRect(ctx, -4 + tailSwing*0.8, -22, 8, 12, '#222');
+    pxRect(ctx, -1 + tailSwing*0.1, -42, 2, 4, '#88ff88');
+
+    // 后肢 (反向关节)
+    pxRect(ctx, -22, -10, 12, 6, '#151515');
+    pxRect(ctx, -28, -15, 8, 12, '#0f0f0f');
+    pxRect(ctx, -30, -5, 4, 18, '#050505');
+    pxRect(ctx, -31, 13, 6, 2, '#555'); 
+    
+    pxRect(ctx, 10, -10, 12, 6, '#151515');
+    pxRect(ctx, 20, -15, 8, 12, '#0f0f0f');
+    pxRect(ctx, 26, -5, 4, 18, '#050505');
+    pxRect(ctx, 25, 13, 6, 2, '#555');
+
+    // 躯干底座与肌肉
+    pxRect(ctx, -18, -16, 36, 38, '#1a1010'); 
+    pxRect(ctx, -16, -14, 32, 32, '#2b1a1a'); 
+    pxRect(ctx, -12, -10, 24, 26, '#3a2222'); 
+
+    // 脉动的血管 (荧光绿)
+    let veinColor = (Math.sin(time * 5) > 0) ? '#228822' : '#115511';
+    pxRect(ctx, -10, -2, 2, 10, veinColor);
+    pxRect(ctx, 8, -2, 2, 10, veinColor);
+    pxRect(ctx, -4, 10, 8, 2, veinColor);
+
+    // 背部甲壳与骨刺 (带反光)
+    pxRect(ctx, -14, -12, 28, 20, '#111');
+    pxRect(ctx, -12, -8, 24, 14, '#1a1a1a');
+    pxRect(ctx, -10, -6, 20, 4, '#2a2a2a'); 
+
+    // 骨刺
+    pxRect(ctx, -16, -10, 4, 2, '#aaa'); pxRect(ctx, -18, -12, 2, 2, '#fff');
+    pxRect(ctx, 12, -10, 4, 2, '#aaa');  pxRect(ctx, 16, -12, 2, 2, '#fff');
+    pxRect(ctx, -18, 0, 4, 2, '#aaa');   pxRect(ctx, -20, -2, 2, 2, '#fff');
+    pxRect(ctx, 14, 0, 4, 2, '#aaa');    pxRect(ctx, 18, -2, 2, 2, '#fff');
+
+    // 荧光绿卵囊与酸液包 (加入辉光)
+    ctx.shadowBlur = 10; ctx.shadowColor = '#00ff00';
+    pxRect(ctx, -14, 10, 8, 8, '#114411'); pxRect(ctx, -12, 12, 4, 4, '#44ff44'); pxRect(ctx, -11, 13, 2, 2, '#ccffcc');
+    pxRect(ctx, 6, 14, 10, 8, '#114411');  pxRect(ctx, 8, 16, 6, 4, '#44ff44');  pxRect(ctx, 10, 17, 2, 2, '#ccffcc');
+    pxRect(ctx, -6, 18, 12, 6, '#114411'); pxRect(ctx, -4, 19, 8, 4, '#44ff44'); pxRect(ctx, -2, 20, 4, 2, '#ccffcc');
+    ctx.shadowBlur = 0;
+
+    // 核心肉瘤 (大招外露时极度明亮)
+    if (vm.coreExposed) {
+        ctx.shadowBlur = 20; ctx.shadowColor = '#ff0000';
+        pxRect(ctx, -8, -6, 16, 16, '#550000');
+        pxRect(ctx, -6, -4, 12, 12, '#ff0000');
+        pxRect(ctx, -4, -2, 8, 8, '#ff8888');
+        pxRect(ctx, -2, 0, 4, 4, '#ffffff');
+        ctx.shadowBlur = 0;
     }
+
+    // 头部 (异形长梭形)
+    let headY = b.skill === 'bite' ? 15 : 0;
+    ctx.translate(0, headY);
     
-    // Ult shadow beast
-    if (b.skill === "ult" && b.skillStep === 1 && b.mp) {
-      ctx.fillStyle = 'rgba(26, 0, 42, 0.6)';
-      ctx.beginPath();
-      const p = b.skillT / 3.0; // 0 to 1
-      ctx.arc(0, -60 * GAME_SCALE, 60 * GAME_SCALE * p, 0, Math.PI * 2);
-      ctx.fill();
+    pxRect(ctx, -8, 22, 16, 12, '#151515');
+    pxRect(ctx, -6, 34, 12, 14, '#111');
+    pxRect(ctx, -4, 48, 8, 10, '#0a0a0a');
+    pxRect(ctx, -2, 24, 4, 20, '#1a1a1a'); 
+    
+    // 邪恶的红色眼孔
+    ctx.shadowBlur = 8; ctx.shadowColor = '#ff0000';
+    pxRect(ctx, -5, 38, 3, 2, '#ff1111');
+    pxRect(ctx, 2, 38, 3, 2, '#ff1111');
+    ctx.shadowBlur = 0;
+
+    if (b.skill === 'fog') {
+        ctx.shadowBlur = 10; ctx.shadowColor = '#8800ff';
+        pxRect(ctx, -10, 26, 3, 3, '#bb55ff'); 
+        pxRect(ctx, 7, 26, 3, 3, '#bb55ff');
+        ctx.shadowBlur = 0;
     }
+
+    // 嘴部与酸液/牙齿
+    if (b.skill === 'acid') {
+        ctx.shadowBlur = 15; ctx.shadowColor = '#00ff00';
+        pxRect(ctx, -5, 56, 10, 8, '#111'); 
+        pxRect(ctx, -3, 56, 6, 12, '#44ff44'); 
+        pxRect(ctx, -1, 60, 2, 10, '#ccffcc'); 
+        ctx.shadowBlur = 0;
+    } else if (b.skill === 'bite') {
+        pxRect(ctx, -6, 56, 12, 8, '#ff1111'); 
+        pxRect(ctx, -4, 56, 2, 4, '#fff'); 
+        pxRect(ctx, 2, 56, 2, 4, '#fff');
+        pxRect(ctx, -2, 62, 4, 6, '#ffaaaa'); 
+    } else {
+        pxRect(ctx, -3, 56, 6, 2, '#aaa'); 
+    }
+    ctx.translate(0, -headY);
+
+    // 前肢巨型螯爪
+    let leftClawY = b.skill === 'sweep' ? 25 : 0;
+    let rightClawY = b.skill === 'sweep' ? -10 : 0;
     
-    ctx.rotate((swing * Math.PI) / 180 * 0.2); // slight body tilt
-    ctx.drawImage(state, -64 * GAME_SCALE, -64 * GAME_SCALE, 128 * GAME_SCALE, 128 * GAME_SCALE);
+    pxRect(ctx, -26, 8 + leftClawY, 10, 18, '#1a1a1a');
+    pxRect(ctx, -30, 22 + leftClawY, 8, 28, '#111');
+    pxRect(ctx, -28, 50 + leftClawY, 4, 12, '#ddd'); 
+    pxRect(ctx, -27, 62 + leftClawY, 2, 6, '#fff');
     
+    pxRect(ctx, 16, 8 + rightClawY, 10, 18, '#1a1a1a');
+    pxRect(ctx, 22, 22 + rightClawY, 8, 28, '#111');
+    pxRect(ctx, 24, 50 + rightClawY, 4, 12, '#ddd');
+    pxRect(ctx, 25, 62 + rightClawY, 2, 6, '#fff');
+
+    ctx.restore();
+    
+    ctx.restore();
+
     ctx.restore();
     
     // hit flash
@@ -1454,7 +1699,7 @@
       ctx.globalCompositeOperation = "source-atop";
       ctx.fillStyle = "white";
       ctx.globalAlpha = 0.6;
-      ctx.fillRect(Math.round(sx - b.r), Math.round(sy - b.r - bob), Math.round(b.r * 2), Math.round(b.r * 2));
+      ctx.fillRect(Math.round(sx - b.r), Math.round(sy - b.r), Math.round(b.r * 2), Math.round(b.r * 2));
       ctx.globalAlpha = 1;
       ctx.globalCompositeOperation = "source-over";
     }
@@ -1470,8 +1715,8 @@
       drawGunslingerBoss(ctx, cam, boss);
       return;
     }
-    if (boss.kind === "morphila") {
-      drawMorphilaBoss(ctx, atlas, cam, boss);
+    if (boss.kind === "void_mother") {
+      drawVoidMotherBoss(ctx, atlas, cam, boss);
       return;
     }
     if (boss.kind === "core") {
