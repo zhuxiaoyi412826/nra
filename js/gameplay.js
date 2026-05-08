@@ -259,6 +259,11 @@
             this.killEnemy(e.x, e.y, e.elite, e.type);
             this.tryDrop(e.x, e.y, e.elite);
             this.progressKillDrops(e.x, e.y, e.elite);
+            
+            if (e.eliteAffix === 'split') {
+              this.spawnEnemy(e.x - 20 * GAME_SCALE, e.y, false, 'basic');
+              this.spawnEnemy(e.x + 20 * GAME_SCALE, e.y, false, 'fast');
+            }
           } else {
             this.hitEnemy(e.x, e.y);
           }
@@ -282,46 +287,56 @@
       const base = 0.02 + this.difficulty * 0.012 + this.kills * 0.0005;
       return clamp(base, 0.02, 0.12);
     }
-    spawnEnemy() {
+    spawnEnemy(xArg, yArg, eliteArg, typeArg) {
       const night = this.isNight();
       const base = this.difficulty;
       const roll = Math.random();
-      let type = "basic";
+      let type = typeArg || "basic";
       
-      if (this.kills === 0 && this.enemies.activeCount === 0 && !this.firstSwordsmanSpawned) {
-        type = "swordsman";
-        this.firstSwordsmanSpawned = true;
-      } else {
-        if (roll < 0.12 + base * 0.02) type = "fast";
-        else if (roll < 0.18 + base * 0.03) type = "tank";
-        else if (roll < 0.18 + base * 0.06) type = "ranged";
-        else if (roll < 0.25 + base * 0.08) type = "swordsman";
+      if (!typeArg) {
+        if (this.kills === 0 && this.enemies.activeCount === 0 && !this.firstSwordsmanSpawned) {
+          type = "swordsman";
+          this.firstSwordsmanSpawned = true;
+        } else {
+          if (roll < 0.12 + base * 0.02) type = "fast";
+          else if (roll < 0.16 + base * 0.03) type = "tank";
+          else if (roll < 0.20 + base * 0.06) type = "ranged";
+          else if (roll < 0.25 + base * 0.08) type = "swordsman";
+          else if (roll < 0.30 + base * 0.05) type = "healer";
+          else if (roll < 0.35 + base * 0.05) type = "buffer";
+        }
       }
 
-      const elite = Math.random() < this.eliteChance() * (night ? 1.25 : 1);
+      const elite = eliteArg !== undefined ? eliteArg : Math.random() < this.eliteChance() * (night ? 1.25 : 1);
       const edge = randInt(0, 3);
-      let x = 0;
-      let y = 0;
-      if (edge === 0) {
-        x = rand(40, WORLD.w - 40);
-        y = -20;
-      } else if (edge === 1) {
-        x = WORLD.w + 20;
-        y = rand(40, WORLD.h - 40);
-      } else if (edge === 2) {
-        x = rand(40, WORLD.w - 40);
-        y = WORLD.h + 20;
-      } else {
-        x = -20;
-        y = rand(40, WORLD.h - 40);
+      let x = xArg !== undefined ? xArg : 0;
+      let y = yArg !== undefined ? yArg : 0;
+      
+      if (xArg === undefined || yArg === undefined) {
+        if (edge === 0) {
+          x = rand(40, WORLD.w - 40);
+          y = -20;
+        } else if (edge === 1) {
+          x = WORLD.w + 20;
+          y = rand(40, WORLD.h - 40);
+        } else if (edge === 2) {
+          x = rand(40, WORLD.w - 40);
+          y = WORLD.h + 20;
+        } else {
+          x = -20;
+          y = rand(40, WORLD.h - 40);
+        }
       }
+
       const e = this.enemies.acquire();
-      e.init(type, x, y, base + (night ? 0.4 : 0), elite);
-      if (elite) {
-        this.spawnBurst(x, y, { count: 22, speed: 340, spread: 2.8, ttlA: 0.14, ttlB: 0.35, sizeA: 1, sizeB: 4, color: "#ffd36f", alpha: 0.9, drag: 3.4, gravity: 220 });
-        if (this.eliteAnnounceCd <= 0) {
-          this.audio.eliteSpawn();
-          this.eliteAnnounceCd = 8;
+      if (e) {
+        e.init(type, x, y, base + (night ? 0.4 : 0), elite);
+        if (elite) {
+          this.spawnBurst(x, y, { count: 22, speed: 340, spread: 2.8, ttlA: 0.14, ttlB: 0.35, sizeA: 1, sizeB: 4, color: "#ffd36f", alpha: 0.9, drag: 3.4, gravity: 220 });
+          if (this.eliteAnnounceCd <= 0) {
+            this.audio.eliteSpawn();
+            this.eliteAnnounceCd = 8;
+          }
         }
       }
     }
@@ -408,6 +423,11 @@
             this.progressKillDrops(e.elite);
             this.kills += 1;
             this.coins += e.elite ? 4 : 1;
+            
+            if (e.eliteAffix === 'split') {
+              this.spawnEnemy(e.x - 20 * GAME_SCALE, e.y, false, 'basic');
+              this.spawnEnemy(e.x + 20 * GAME_SCALE, e.y, false, 'fast');
+            }
           }
         }
       }
@@ -794,7 +814,38 @@
           }
         }
       }
-      for (const e of this.enemies.items) e.update(dt, WORLD, this.player, this.bullets, this.difficulty, night, audio);
+      for (const e of this.enemies.items) {
+        if (!e.active) continue;
+        e.update(dt, WORLD, this.player, this.bullets, this.difficulty, night, audio);
+        
+        if (e.type === 'healer') {
+          e.supportTimer += dt;
+          if (e.supportTimer > 3.5) {
+            e.supportTimer = 0;
+            for (const other of this.enemies.items) {
+              if (other.active && other !== e && Math.hypot(e.x - other.x, e.y - other.y) < 150 * GAME_SCALE) {
+                 other.hp = Math.min(other.maxHp, other.hp + 20 + this.difficulty*5);
+                 this.spawnFloatingText(other.x, other.y - 30, '+HP', '#44ff44');
+              }
+            }
+            this.spawnBurst(e.x, e.y, { count: 20, color: '#44ff44', speed: 100, spread: Math.PI*2, ttlA: 0.5, ttlB: 1.0, sizeA: 3, sizeB: 6 });
+            audio.powerup(); // repurpose sound or just ignore
+          }
+        }
+        
+        if (e.type === 'buffer') {
+          e.supportTimer += dt;
+          if (e.supportTimer > 4.5) {
+            e.supportTimer = 0;
+            for (const other of this.enemies.items) {
+              if (other.active && other !== e && Math.hypot(e.x - other.x, e.y - other.y) < 200 * GAME_SCALE) {
+                 other.buffTimer = 3.0; 
+              }
+            }
+            this.spawnBurst(e.x, e.y, { count: 20, color: '#ffaa00', speed: 150, spread: Math.PI*2, ttlA: 0.5, ttlB: 1.0, sizeA: 3, sizeB: 6 });
+          }
+        }
+      }
       for (const p of this.pickups.items) p.update(dt);
       for (const p of this.particles.items) p.update(dt);
       for (const t of this.floatingTexts.items) t.update(dt);
@@ -949,6 +1000,11 @@
                 this.killEnemy(e.x, e.y, e.elite, e.type);
                 this.tryDrop(e.x, e.y, e.elite);
                 this.progressKillDrops(e.x, e.y, e.elite);
+                
+                if (e.eliteAffix === 'split') {
+                  this.spawnEnemy(e.x - 20 * GAME_SCALE, e.y, false, 'basic');
+                  this.spawnEnemy(e.x + 20 * GAME_SCALE, e.y, false, 'fast');
+                }
               }
             }
             break;

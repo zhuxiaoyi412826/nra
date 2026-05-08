@@ -787,7 +787,9 @@
     fast: { body: "#ff5959", shadow: "#8b2a2a", bulky: false, lean: true },
     tank: { body: "#ffcd59", shadow: "#8b732a", bulky: true },
     swordsman: { body: "#cd59ff", shadow: "#732a8b", bulky: false },
-    ranged: { body: "#59cdff", shadow: "#2a738b", bulky: false }
+    ranged: { body: "#59cdff", shadow: "#2a738b", bulky: false },
+    healer: { body: "#44ff44", shadow: "#115511", bulky: false, lean: true },
+    buffer: { body: "#ffaa00", shadow: "#885500", bulky: true }
   };
 
   const drawEnemy = (ctx, atlas, cam, e) => {
@@ -801,6 +803,34 @@
       ctx.beginPath();
       ctx.arc(sx, sy, e.r, 0, Math.PI * 2);
       ctx.stroke();
+      
+      // 绘制精英怪词条光环
+      if (e.eliteAffix === 'shield') {
+        ctx.save();
+        ctx.translate(sx, sy);
+        ctx.rotate(Math.atan2(e.dirY || 0, e.dirX || 0));
+        ctx.strokeStyle = "rgba(100, 200, 255, 0.8)";
+        ctx.lineWidth = 4;
+        ctx.beginPath();
+        ctx.arc(0, 0, e.r + 4, -Math.PI/2.5, Math.PI/2.5); // 正面半弧护盾
+        ctx.stroke();
+        ctx.restore();
+      } else if (e.eliteAffix === 'split') {
+        const time = performance.now() / 500;
+        ctx.fillStyle = "rgba(255, 255, 255, 0.6)";
+        ctx.beginPath(); ctx.arc(sx + Math.cos(time)*e.r, sy + Math.sin(time)*e.r, 4, 0, Math.PI*2); ctx.fill();
+        ctx.beginPath(); ctx.arc(sx + Math.cos(time+Math.PI)*e.r, sy + Math.sin(time+Math.PI)*e.r, 4, 0, Math.PI*2); ctx.fill();
+      } else if (e.eliteAffix === 'lifesteal') {
+        ctx.fillStyle = "rgba(255, 50, 50, 0.4)";
+        ctx.beginPath();
+        ctx.arc(sx, sy, e.r - 2, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+    
+    if (e.buffTimer > 0) {
+      ctx.fillStyle = "rgba(255, 170, 0, 0.3)";
+      ctx.beginPath(); ctx.arc(sx, sy, e.r + 6, 0, Math.PI * 2); ctx.fill();
     }
     
     ctx.globalAlpha = e.hitFlash > 0 ? 0.35 : 1;

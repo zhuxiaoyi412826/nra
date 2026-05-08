@@ -5,7 +5,7 @@
   const { WEAPONS, PICKUP } = root.constants;
   const GAME_SCALE = Math.max(0.5, Math.min(3, Number(root.constants?.GAME_SCALE ?? 1) || 1));
   const PLAYER_BASE_R = 12;
-  const ENEMY_BASE_R = { basic: 18, fast: 16, tank: 22, ranged: 17 };
+  const ENEMY_BASE_R = { basic: 18, fast: 16, tank: 22, ranged: 17, healer: 17, buffer: 19 };
   const ENEMY_ELITE_BONUS_R = 3;
   const SHOT_SPAWN_PAD = 6 * GAME_SCALE;
   const MUZZLE_PAD = 7 * GAME_SCALE;
@@ -147,6 +147,20 @@
         this.touchDmg = 15 + base * 3;
         this.shootCd = 0;
         this.weaponType = 'sword';
+      } else if (t === "healer") {
+        this.r = ENEMY_BASE_R.healer * GAME_SCALE;
+        this.maxHp = 35 + base * 8;
+        this.speed = 100 + base * 8;
+        this.touchDmg = 5 + base * 1;
+        this.shootCd = 0;
+        this.weaponType = 'stick'; // Priest staff
+      } else if (t === "buffer") {
+        this.r = ENEMY_BASE_R.buffer * GAME_SCALE;
+        this.maxHp = 45 + base * 12;
+        this.speed = 90 + base * 8;
+        this.touchDmg = 8 + base * 2;
+        this.shootCd = 0;
+        this.weaponType = 'hammer'; // War drum mallet
       } else {
         this.r = ENEMY_BASE_R.ranged * GAME_SCALE;
         this.maxHp = 30 + base * 10;
@@ -155,19 +169,37 @@
         this.shootCd = rand(0.6, 1.2);
         this.weaponType = 'none';
       }
+      this.eliteAffix = null;
       if (this.elite) {
         this.r *= 1.666; // 精英怪的体型比普通敌人大三分之二
         this.maxHp = Math.floor(this.maxHp * 1.85 + 10);
         this.speed *= 1.14;
         this.touchDmg = Math.floor(this.touchDmg * 1.25);
         this.shootCd *= 0.85;
+        
+        const roll = rand(0, 1);
+        if (roll < 0.33) this.eliteAffix = 'shield';
+        else if (roll < 0.66) this.eliteAffix = 'split';
+        else this.eliteAffix = 'lifesteal';
       }
       this.hp = this.maxHp;
       this.touchCd = 0;
       this.hitFlash = 0;
       this.walkAnim = 0;
+      this.buffTimer = 0;
+      this.supportTimer = 0;
     }
-    hurt(dmg) {
+    hurt(dmg, hitX, hitY) {
+      if (this.eliteAffix === 'shield' && hitX !== undefined && hitY !== undefined) {
+        const toHitX = hitX - this.x;
+        const toHitY = hitY - this.y;
+        const dot = toHitX * (this.dirX || 0) + toHitY * (this.dirY || 0);
+        if (dot > 0) {
+          // Blocked by frontal shield
+          this.hitFlash = 0.05;
+          return false;
+        }
+      }
       this.hp -= dmg;
       this.hitFlash = 0.08;
       if (this.hp <= 0) {
@@ -205,8 +237,15 @@
 
       const nightBoost = isNight ? 1.15 : 1.0;
       const eliteBoost = this.elite ? 1.08 : 1.0;
+      
+      this.buffTimer = Math.max(0, this.buffTimer - dt);
+      const buffMult = this.buffTimer > 0 ? 1.4 : 1.0;
+
       const pushingSlow = dist < this.r + (player.r ?? 16) ? 0.5 : 1.0;
-      const desiredSpeed = (this.type === "ranged" && dist < 280 ? this.speed * 0.35 : this.speed) * pushingSlow;
+      const desiredSpeed = (this.type === "ranged" && dist < 280 ? this.speed * 0.35 : this.speed) * pushingSlow * buffMult;
+      
+      this.dirX = n.x;
+      this.dirY = n.y;
       
       const vx = n.x * desiredSpeed * nightBoost * eliteBoost;
       const vy = n.y * desiredSpeed * nightBoost * eliteBoost;
@@ -244,6 +283,9 @@
             this.touchCd = this.elite ? 0.45 : 0.55;
             if (dist <= player.r + this.r + 25 * GAME_SCALE) {
               player.takeDamage(this.touchDmg, { x: n.x, y: n.y }, audio);
+              if (this.eliteAffix === 'lifesteal') {
+                 this.hp = Math.min(this.maxHp, this.hp + this.touchDmg * 2);
+              }
             }
           }
         }
@@ -251,6 +293,9 @@
         if (dist < this.r + player.r + 2 && this.touchCd <= 0) {
           this.touchCd = this.elite ? 0.45 : 0.55;
           player.takeDamage(this.touchDmg, { x: n.x, y: n.y }, audio);
+          if (this.eliteAffix === 'lifesteal') {
+             this.hp = Math.min(this.maxHp, this.hp + this.touchDmg * 2);
+          }
         }
       }
 
