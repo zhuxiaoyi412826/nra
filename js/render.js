@@ -543,9 +543,21 @@
     for (const ob of world.obstacles) {
       const sx = ob.x - cam.x;
       const sy = ob.y - cam.y;
-      ctx.fillStyle = "rgba(255,255,255,0.06)";
+      
+      // 2.5D 墙体/障碍物拉伸透视效果 (Voxel/Pseudo-3D)
+      const wallHeight = 35 * GAME_SCALE; // 墙体厚度/高度
+      
+      // 绘制墙体侧面 (南面)
+      ctx.fillStyle = "rgba(10, 15, 20, 0.85)"; // 暗色侧面
+      ctx.fillRect(sx, sy + ob.h, ob.w, wallHeight);
+      ctx.strokeStyle = "rgba(255,255,255,0.05)";
+      ctx.lineWidth = 1;
+      ctx.strokeRect(sx, sy + ob.h, ob.w, wallHeight);
+      
+      // 绘制顶面 (Top Face)
+      ctx.fillStyle = "rgba(40, 45, 55, 0.9)";
       ctx.fillRect(sx, sy, ob.w, ob.h);
-      ctx.strokeStyle = "rgba(255,255,255,0.12)";
+      ctx.strokeStyle = "rgba(255,255,255,0.15)";
       ctx.lineWidth = 2;
       ctx.strokeRect(sx, sy, ob.w, ob.h);
     }
@@ -556,7 +568,13 @@
         const sx = b.x - cam.x;
         const sy = b.y - cam.y;
         if (sx < -50 || sy < -50 || sx > viewW + 50 || sy > viewH + 50) continue;
-        ctx.drawImage(atlas.barrel, Math.round(sx - 16*GAME_SCALE), Math.round(sy - 16*GAME_SCALE), 32*GAME_SCALE, 32*GAME_SCALE);
+        
+        // Voxel effect for barrels: draw multiple stacked slices
+        for(let z = 0; z < 5; z++) {
+          ctx.globalAlpha = (z === 4) ? 1.0 : 0.6; // Darker lower layers
+          ctx.drawImage(atlas.barrel, Math.round(sx - 16*GAME_SCALE), Math.round(sy - 16*GAME_SCALE - z * 4), 32*GAME_SCALE, 32*GAME_SCALE);
+        }
+        ctx.globalAlpha = 1.0;
       }
     }
   };
@@ -2001,10 +2019,20 @@
     
     ctx.globalAlpha = p.invuln > 0 ? 0.6 : 1;
     
-    ctx.save();
-    ctx.scale(GAME_SCALE * 0.5, GAME_SCALE * 0.5);
-    drawPlayerSprite(ctx, p);
-    ctx.restore();
+    // Voxel Player Stack Effect
+    for(let z = 0; z < 5; z++) {
+      ctx.save();
+      ctx.translate(0, -z * 3); // Extrude upwards
+      ctx.scale(GAME_SCALE * 0.5, GAME_SCALE * 0.5);
+      
+      if(z < 4) {
+         // Draw shadow layers darker
+         ctx.filter = 'brightness(0.4)';
+      }
+      
+      drawPlayerSprite(ctx, p);
+      ctx.restore();
+    }
     
     ctx.globalAlpha = 1;
     
@@ -2028,6 +2056,7 @@
       }
       ctx.rotate(aimAngle);
       
+      ctx.filter = 'none'; // reset filter just in case
       ctx.scale(0.5, 0.5); // Also scale down the weapon drawing
       
       if (slot.weapon.key === "rocket_launcher") {
